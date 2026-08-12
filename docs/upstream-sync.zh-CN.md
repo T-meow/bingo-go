@@ -5,7 +5,7 @@
 - `main` 是 Bingo Go 的独立主线，从项目当前快照建立根提交，不包含 Rei 的 Git 历史。
 - `upstream` 只记录 Rei 来源 `https://github.com/yexrob/rei.git`，push URL 固定为 `DISABLED`。
 - 主仓库不 fetch Rei，不创建 `upstream/*` remote-tracking refs，也不 merge 无共同祖先的 Rei 分支。
-- 尚未创建 Bingo Go 的 `origin`；创建个人远端和首次 push 属于后续独立操作。
+- `origin` 指向独立公开仓库 `git@github.com:T-meow/bingo-go.git`；Rei 仍只作为来源记录，不是跟踪分支。
 
 ## 审阅 Rei 更新
 
@@ -34,7 +34,7 @@ cargo test --locked --all-targets
 cargo build --locked --release
 ```
 
-只有 `--version` 和 `--json-events --probe` 同时通过，且探针包含所需 capability 后，才可通过 `scripts/prepare-windows-package.mjs` 更新随包二进制。`resources/bin/win32-x64/bingo.exe` 是可重建产物，不进入 Git。
+只有 `--version` 和 `--json-events --probe` 同时通过，且探针包含所需 capability 后，才可更新 `vendor/bingo/v0.4.0-protocol-v1.patch` 和 workflow 中的固定 commit。CI 通过 `scripts/prepare-bingo-package.mjs` 生成当前平台的 `resources/bin/<platform>-<arch>/bingo[.exe]`；这些二进制都是可重建产物，不进入 Git。
 
 ## 同步记录
 

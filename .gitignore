@@ -5,7 +5,7 @@ node_modules/
 dist/
 out/
 release/
-resources/bin/win32-x64/bingo.exe
+resources/bin/
 *.tsbuildinfo
 
 # Electron

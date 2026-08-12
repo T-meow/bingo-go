@@ -3,6 +3,8 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { cliEventSchema, clientCommandSchema, type CliEvent, type CliSessionMetadata, type ClientCommand, type PromptResponse, type TeamDefinition, type TeamSnapshot } from '../../shared/contracts/cli'
 import type { BingoSession, BingoSessionHandlers } from './bingoSession'
 import { BingoCommandError } from './bingoSession'
+import { binaryCommand } from './binaryCommand'
+import { terminateProcessTree } from './processTree'
 
 const MAX_LINE_BYTES = 8 * 1024 * 1024
 const STARTUP_TIMEOUT_MS = 10_000
@@ -20,6 +22,7 @@ export class StdioBingoSession implements BingoSession {
   private forceTimer: NodeJS.Timeout | null = null
   private exitPromise: Promise<void> | null = null
   private resolveExit: (() => void) | null = null
+  private exitReported = false
   private commandWaiters = new Map<string, { resolve: (event: CliEvent) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>()
 
   constructor(
@@ -31,6 +34,8 @@ export class StdioBingoSession implements BingoSession {
 
   open(sessionId?: string): Promise<CliSessionMetadata> {
     if (this.child) throw new Error('Session is already open')
+    this.closed = false
+    this.exitReported = false
     const args = ['--json-events']
     if (sessionId) args.push('--session', sessionId)
 
@@ -39,11 +44,12 @@ export class StdioBingoSession implements BingoSession {
       this.rejectReady = reject
     })
 
-    const scriptBinary = process.platform === 'win32' && /\.(?:mjs|cjs|js)$/i.test(this.binaryPath)
-    const child = spawn(scriptBinary ? process.execPath : this.binaryPath, scriptBinary ? [this.binaryPath, ...args] : args, {
+    const launch = binaryCommand(this.binaryPath, args)
+    const child = spawn(launch.command, launch.args, {
       cwd: this.cwd,
       env: this.env,
       shell: false,
+      windowsVerbatimArguments: launch.windowsVerbatimArguments,
       stdio: ['pipe', 'pipe', 'pipe']
     })
     this.child = child
@@ -66,7 +72,7 @@ export class StdioBingoSession implements BingoSession {
         this.commandWaiters.clear()
       }
       this.rejectReady?.(error ?? new Error('bingo exited before session.ready'))
-      this.handlers.onExit(error)
+      this.reportExit(error, code, signal)
     })
 
     const timer = setTimeout(() => this.fail(new Error('bingo did not emit session.ready within 10 seconds')), STARTUP_TIMEOUT_MS)
@@ -93,8 +99,8 @@ export class StdioBingoSession implements BingoSession {
     this.cancelTimer = setTimeout(() => {
       const child = this.child
       if (!child) return
-      child.kill('SIGTERM')
-      this.forceTimer = setTimeout(() => { if (this.child) this.child.kill('SIGKILL') }, 2_000)
+      void terminateProcessTree(child, 'SIGTERM')
+      this.forceTimer = setTimeout(() => { if (this.child) void terminateProcessTree(this.child, 'SIGKILL') }, 2_000)
     }, 750)
   }
 
@@ -189,6 +195,7 @@ export class StdioBingoSession implements BingoSession {
   async delete(): Promise<string> {
     const event = await this.request({ protocolVersion: 1, type: 'session.delete', commandId: randomUUID() }, 'session.deleted')
     if (event.type !== 'session.deleted') throw new Error('Unexpected session.delete response')
+    this.closed = true
     await Promise.race([this.exitPromise ?? Promise.resolve(), new Promise<void>((resolve) => setTimeout(resolve, 500))])
     return event.deletedSessionId
   }
@@ -209,9 +216,9 @@ export class StdioBingoSession implements BingoSession {
     this.child?.stdin.end()
     const graceful = await Promise.race([exited.then(() => true), new Promise<false>((resolve) => setTimeout(() => resolve(false), 2_000))])
     if (graceful || !this.child) return
-    this.child.kill('SIGTERM')
+    await terminateProcessTree(this.child, 'SIGTERM')
     const terminated = await Promise.race([exited.then(() => true), new Promise<false>((resolve) => setTimeout(() => resolve(false), 1_000))])
-    if (!terminated && this.child) this.child.kill('SIGKILL')
+    if (!terminated && this.child) await terminateProcessTree(this.child, 'SIGKILL')
   }
 
   private consume(chunk: string): void {
@@ -311,6 +318,12 @@ export class StdioBingoSession implements BingoSession {
     this.forceTimer = null
   }
 
+  private reportExit(error: Error | null, exitCode: number | null, signal: string | null): void {
+    if (this.exitReported) return
+    this.exitReported = true
+    this.handlers.onExit(error, { exitCode, signal })
+  }
+
   private fail(error: Error): void {
     this.rejectReady?.(error)
     this.rejectReady = null
@@ -325,7 +338,7 @@ export class StdioBingoSession implements BingoSession {
     this.clearTerminationTimers()
     this.resolveExit?.()
     this.resolveExit = null
-    if (child && !child.killed) child.kill()
-    this.handlers.onExit(error)
+    if (child && !child.killed) void terminateProcessTree(child, 'SIGKILL')
+    this.reportExit(error, null, null)
   }
 }

@@ -44,8 +44,7 @@ describe('TranscriptRepository', () => {
     }
     await writeFile(join(dir, 'images.jsonl'), `${JSON.stringify(source)}\n`)
     const { history } = await new TranscriptRepository(dir).load('images')
-    expect(history[0].value.markdown).toBe('看看这个')
-    expect(history[0].value.attachments?.[0]).toMatchObject({ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aA==' })
+    expect(history[0]).toMatchObject({ type: 'message', value: { markdown: '看看这个', attachments: [{ mediaType: 'image/png', dataUrl: 'data:image/png;base64,aA==' }] } })
   })
 
   it('removes multiple GUI markers separated by blank lines', async () => {
@@ -59,8 +58,8 @@ describe('TranscriptRepository', () => {
       ]
     })}\n`)
     const { history } = await new TranscriptRepository(dir).load('images')
-    expect(history[0].value.markdown).toBe('比较图片')
-    expect(history[0].value.attachments).toHaveLength(2)
+    expect(history[0]).toMatchObject({ type: 'message', value: { markdown: '比较图片' } })
+    expect(history[0]?.type === 'message' ? history[0].value.attachments : []).toHaveLength(2)
   })
 
   it('does not remove marker-looking assistant text', async () => {
@@ -73,6 +72,37 @@ describe('TranscriptRepository', () => {
       ]
     })}\n`)
     const { history } = await new TranscriptRepository(dir).load('assistant')
-    expect(history[0].value.markdown).toBe('引用 #[image 4]')
+    expect(history[0]).toMatchObject({ type: 'message', value: { markdown: '引用 #[image 4]' } })
+  })
+
+  it('restores tool calls in transcript order and pairs their results', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'bingo-go-tools-'))
+    await writeFile(join(dir, 'tools.jsonl'), [
+      JSON.stringify({ role: 'user', content: [{ type: 'text', text: '检查项目' }] }),
+      JSON.stringify({ role: 'assistant', content: [{ type: 'text', text: '我先查看文件。' }, { type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'Get-ChildItem -Force' } }] }),
+      JSON.stringify({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: [{ type: 'text', text: 'README.md' }], is_error: false }] }),
+      JSON.stringify({ role: 'assistant', content: [{ type: 'text', text: '检查完成。' }] })
+    ].join('\n'))
+
+    const { history, warnings } = await new TranscriptRepository(dir).load('tools')
+
+    expect(warnings).toEqual([])
+    expect(history).toMatchObject([
+      { type: 'message', value: { role: 'user', markdown: '检查项目' } },
+      { type: 'message', value: { role: 'assistant', markdown: '我先查看文件。' } },
+      { type: 'tool', value: { id: 'tool-1', name: 'Bash', summary: 'Get-ChildItem -Force', status: 'done', output: 'README.md' } },
+      { type: 'message', value: { role: 'assistant', markdown: '检查完成。' } }
+    ])
+  })
+
+  it('marks an unanswered or interrupted transcript tool as interrupted', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'bingo-go-tools-'))
+    await writeFile(join(dir, 'tools.jsonl'), [
+      JSON.stringify({ role: 'assistant', content: [{ type: 'tool_use', id: 'tool-1', name: 'Bash', input: { command: 'long-task' } }, { type: 'tool_use', id: 'tool-2', name: 'Read', input: { path: 'README.md' } }] }),
+      JSON.stringify({ role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tool-1', content: '<tool_use_error>interrupted by the user before this tool produced a result</tool_use_error>', is_error: true }] })
+    ].join('\n'))
+
+    const { history } = await new TranscriptRepository(dir).load('tools')
+    expect(history.filter((item) => item.type === 'tool').map((item) => item.value.status)).toEqual(['interrupted', 'interrupted'])
   })
 })

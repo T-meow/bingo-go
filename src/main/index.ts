@@ -5,6 +5,7 @@ import { registerIpc, sendSessionEvent } from './ipc/registerIpc'
 import { RuntimeLocator } from './runtime/runtimeLocator'
 import { SessionManager } from './runtime/sessionManager'
 import { StdioBingoSession } from './runtime/stdioBingoSession'
+import { bundledBingoPath } from './runtime/bundledBinary'
 import { SettingsRepository } from './storage/settingsRepository'
 import { AppearanceRepository } from './storage/appearanceRepository'
 import { TranscriptRepository } from './storage/transcriptRepository'
@@ -25,16 +26,12 @@ async function createWindow(): Promise<void> {
   })
   window.setMenuBarVisibility(false)
   window.removeMenu()
-  const bundledBinary = app.isPackaged ? join(process.resourcesPath, 'bin', 'win32-x64', 'bingo.exe') : undefined
+  const bundledBinary = app.isPackaged ? bundledBingoPath(process.resourcesPath) : undefined
   const binaryPath = process.env.BINGO_GUI_BINARY ?? bundledBinary ?? 'bingo'
   const locator = new RuntimeLocator({ bundledBinary })
   sessions = new SessionManager(
     (handlers) => new StdioBingoSession(binaryPath, workspace.current(), handlers),
-    (event) => {
-      if (event.payload.type !== 'protocol.ready' && event.payload.type !== 'inspection.ready' && event.payload.type !== 'session.ready') {
-        sendSessionEvent(window, { connectionId: event.connectionId, sequence: event.sequence, payload: event.payload })
-      }
-    }
+    (event) => sendSessionEvent(window, event)
   )
   const home = process.env.HOME ?? process.env.USERPROFILE ?? app.getPath('home')
   const transcripts = new TranscriptRepository(join(home, '.local', 'share', 'bingo', 'transcripts'))

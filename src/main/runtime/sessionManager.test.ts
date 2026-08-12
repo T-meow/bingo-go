@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { BingoSession } from './bingoSession'
+import type { BingoSession, BingoSessionHandlers } from './bingoSession'
 import { SessionManager } from './sessionManager'
 
 const metadata = { bingoVersion: '1', protocolVersion: 1 as const, sessionId: 's1', displayName: 'New conversation', transcriptPath: '/tmp/s1', resumed: false, cwd: '/tmp', provider: 'default', model: 'm', thinkingLevel: 'off' as const, permissionMode: 'default', theme: 'auto' as const, supportsImages: false }
@@ -43,5 +43,30 @@ describe('SessionManager', () => {
     expect(instances[1].rename).toHaveBeenCalledWith('renamed')
     expect(instances[1].close).toHaveBeenCalledOnce()
     expect(instances[0].close).not.toHaveBeenCalled()
+  })
+
+  it('emits a terminal transport error and invalidates the connection on child exit', async () => {
+    let handlers: BingoSessionHandlers
+    const emit = vi.fn()
+    const session = {
+      open: vi.fn().mockResolvedValue(metadata), addAttachment: vi.fn(), sendTurn: vi.fn(), cancelTurn: vi.fn(), respondToPrompt: vi.fn(), listProviders: vi.fn(), listModels: vi.fn(), ...teamMethods(), rename: vi.fn(), delete: vi.fn(), close: vi.fn()
+    }
+    const manager = new SessionManager((nextHandlers) => {
+      handlers = nextHandlers
+      return session
+    }, emit)
+    const opened = await manager.open()
+    const turnId = crypto.randomUUID()
+    await manager.send(opened.connectionId, turnId, 'run a tool')
+
+    handlers!.onExit(new Error('protocol failure'), { exitCode: 1, signal: null })
+
+    expect(emit).toHaveBeenCalledWith(expect.objectContaining({
+      connectionId: opened.connectionId,
+      sequence: 1,
+      payload: expect.objectContaining({ type: 'transport.error', exitCode: 1 })
+    }))
+    expect(manager.snapshot()).toBeNull()
+    expect(() => manager.cancel(opened.connectionId, turnId)).toThrow('stale')
   })
 })

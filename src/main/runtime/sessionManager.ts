@@ -1,9 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import type { CliEvent, CliSessionMetadata, PromptResponse, TeamDefinition, TeamSnapshot } from '../../shared/contracts/cli'
-import type { BingoSession, BingoSessionHandlers } from './bingoSession'
+import { isRendererBingoEvent, type RendererCliPayload } from '../../shared/contracts/ipc'
+import type { BingoSession, BingoSessionExit, BingoSessionHandlers } from './bingoSession'
 import { BingoCommandError } from './bingoSession'
 
-export type ManagedSessionEvent = { connectionId: string; sequence: number; payload: CliEvent }
+export type ManagedSessionEvent = {
+  connectionId: string
+  sequence: number
+  payload: RendererCliPayload
+}
 export type SessionFactory = (handlers: BingoSessionHandlers) => BingoSession
 
 type Active = { connectionId: string; sessionId: string; metadata: CliSessionMetadata; session: BingoSession; sequence: number; turnId: string | null; prompts: Set<string> }
@@ -28,9 +33,7 @@ export class SessionManager {
       const connectionId = randomUUID()
       const session = this.factory({
         onEvent: (event) => this.handleEvent(connectionId, event),
-        onExit: () => {
-          if (this.active?.connectionId === connectionId) this.active = null
-        }
+        onExit: (error, exit) => this.handleExit(connectionId, error, exit)
       })
       const metadata = await session.open(sessionId)
       if (!metadata.sessionId) throw new Error('Conversation session.ready did not contain a session ID')
@@ -189,6 +192,7 @@ export class SessionManager {
   }
 
   private handleEvent(connectionId: string, payload: CliEvent): void {
+    if (!isRendererBingoEvent(payload)) return
     const active = this.active
     if (!active || active.connectionId !== connectionId) return
     if ('turnId' in payload && payload.turnId && active.turnId && payload.turnId !== active.turnId) return
@@ -200,6 +204,29 @@ export class SessionManager {
     }
     active.sequence += 1
     this.emit({ connectionId, sequence: active.sequence, payload })
+  }
+
+  private handleExit(connectionId: string, _error: Error | null, exit: BingoSessionExit): void {
+    const active = this.active
+    if (!active || active.connectionId !== connectionId) return
+    this.active = null
+    active.sequence += 1
+    this.emit({
+      connectionId,
+      sequence: active.sequence,
+      payload: {
+        type: 'transport.error',
+        error: {
+          code: 'BINGO_TRANSPORT_ERROR',
+          msg: 'Bingo 运行时连接意外中断，请重试或新建对话。',
+          level: 'flow',
+          recoverable: true,
+          action: 'retry'
+        },
+        exitCode: exit.exitCode,
+        signal: exit.signal
+      }
+    })
   }
 
   private requireActive(connectionId: string): Active {

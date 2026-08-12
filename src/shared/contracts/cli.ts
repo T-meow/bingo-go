@@ -3,6 +3,7 @@ import { z } from 'zod'
 export const PROTOCOL_VERSION = 1 as const
 
 const uuid = z.string().uuid()
+export const promptIdSchema = z.string().min(1).max(255)
 const commandBase = z.object({ protocolVersion: z.literal(1), commandId: uuid })
 const eventBase = z.object({
   protocolVersion: z.literal(1),
@@ -51,7 +52,7 @@ export const clientCommandSchema = z.discriminatedUnion('type', [
   }),
   commandBase.extend({ type: z.literal('turn.start'), turnId: uuid, prompt: z.string().min(1).max(1_000_000) }),
   commandBase.extend({ type: z.literal('turn.cancel'), turnId: uuid }),
-  commandBase.extend({ type: z.literal('prompt.respond'), turnId: uuid, promptId: uuid, response: promptResponseSchema }),
+  commandBase.extend({ type: z.literal('prompt.respond'), turnId: uuid, promptId: promptIdSchema, response: promptResponseSchema }),
   commandBase.extend({ type: z.literal('providers.list') }),
   commandBase.extend({ type: z.literal('models.list'), provider: z.string().min(1) }),
   commandBase.extend({ type: z.literal('settings.get') }),
@@ -140,7 +141,7 @@ export const cliEventSchema = z.union([
   eventBase.extend({
     type: z.literal('prompt.request'),
     turnId: uuid,
-    promptId: uuid,
+    promptId: promptIdSchema,
     kind: z.enum(['permission', 'question']),
     title: z.string(),
     question: z.string(),
@@ -150,7 +151,7 @@ export const cliEventSchema = z.union([
   eventBase.extend({
     type: z.literal('prompt.resolved'),
     turnId: uuid,
-    promptId: uuid,
+    promptId: promptIdSchema,
     commandId: uuid.optional(),
     reason: z.enum(['responded', 'turn-cancelled', 'session-closing'])
   }),

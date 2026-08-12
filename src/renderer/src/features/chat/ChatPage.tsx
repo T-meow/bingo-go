@@ -6,7 +6,7 @@ import { Alert, Avatar, Button, Image, Input, Modal, Select, Space, Tag, Tooltip
 import type { PromptResponse } from '../../../../shared/contracts/cli'
 import type { GuiError, MessageImageAttachment, RuntimeSettings, SessionSummary, WorkspacePreferencesV2 } from '../../../../shared/contracts/ipc'
 import { ModelPicker } from '../../components/ModelPicker'
-import type { ChatState, PromptRequest, ToolActivity } from '../../state/chatReducer'
+import type { ChatMessage, ChatState, ChatTimelineItem, PromptRequest, ToolActivity } from '../../state/chatReducer'
 import { IMAGE_ACCEPT, MAX_ATTACHMENTS, type ComposerImageAttachment } from './attachments'
 
 export function ChatPage({ state, activeSession, ready, connected, sessionOperation, runtimeSettings, selectedProvider, selectedModel, models, thinkingLevel, settingsError, savingRuntime, draft, attachments, attachmentCapability, workspacePreferences, workspaceBusy, onDraftChange, onAddAttachments, onRemoveAttachment, onWorkspaceChange, onProviderChange, onModelChange, onThinkingChange, onSaveRuntime, onSubmit, onCancel, onRespond }: {
@@ -40,8 +40,10 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
   onRespond: (response: PromptResponse) => void
 }): React.JSX.Element {
   const attachmentsRef = useRef<React.ComponentRef<typeof Attachments>>(null)
+  const chatScrollRef = useRef<HTMLElement>(null)
+  const followOutputRef = useRef(true)
   const prompt = state.prompts[0]
-  const bubbleItems: BubbleItemType[] = state.messages.map((message) => ({
+  const bubbleItem = (message: ChatMessage): BubbleItemType => ({
     key: message.id,
     role: message.role === 'assistant' ? 'ai' : 'user',
     content: message.role === 'user'
@@ -55,8 +57,7 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
     footer: message.role === 'assistant' && message.markdown
       ? <Actions items={[{ key: 'copy', label: '复制', icon: <CopyOutlined />, onItemClick: () => void navigator.clipboard?.writeText(message.markdown) }]} />
       : undefined
-  }))
-  const toolItems = toolsToThoughts(state.tools)
+  })
   const provider = runtimeSettings?.providers.find((item) => item.name === selectedProvider)
   const runtimeDirty = Boolean(runtimeSettings && (selectedProvider !== runtimeSettings.provider || selectedModel !== runtimeSettings.model || thinkingLevel !== runtimeSettings.thinkingLevel))
   const controlsDisabled = Boolean(state.turnId) || sessionOperation
@@ -85,28 +86,26 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
       document.removeEventListener('drop', preventFileNavigation)
     }
   }, [])
+  useEffect(() => {
+    const scroll = chatScrollRef.current
+    if (scroll && followOutputRef.current) scroll.scrollTop = scroll.scrollHeight
+  }, [state.timeline, state.error])
   return (
     <main className="chat-page" data-qa-state={state.turnId ? 'loading' : state.messages.length ? 'chat' : 'empty'}>
       <header className="page-toolbar chat-toolbar">
         <div className="page-heading"><span>本地对话</span><h1>{activeSession?.name ?? '新对话'}</h1></div>
       </header>
       {settingsError && <Alert className="page-alert" type="error" showIcon message={settingsError.code} description={settingsError.msg} />}
-      <section className="chat-scroll" aria-live="polite">
-        {bubbleItems.length === 0 && !state.turnId && <EmptyChat onPrompt={(value) => { onDraftChange(value) }} />}
-        {bubbleItems.length > 0 && <Bubble.List
-          rootClassName="message-list"
-          autoScroll
-          items={bubbleItems}
-          role={{
-            user: { placement: 'end', variant: 'filled', shape: 'corner', avatar: <Avatar icon={<UserOutlined />} /> },
-            ai: {
-              placement: 'start', variant: 'borderless', avatar: <Avatar className="bingo-avatar" icon={<RobotOutlined />} />,
-              contentRender: (content) => <AssistantMarkdown markdown={String(content)} />
-            }
-          }}
-        />}
+      <section ref={chatScrollRef} className="chat-scroll" aria-live="polite" onScroll={(event) => {
+        const scroll = event.currentTarget
+        followOutputRef.current = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80
+      }}>
+        {state.timeline.length === 0 && !state.turnId && <EmptyChat onPrompt={(value) => { onDraftChange(value) }} />}
+        {state.timeline.length > 0 && <div className="chat-timeline">{timelineGroups(state.timeline).map((group) => group.type === 'messages'
+          ? <Bubble.List key={group.key} rootClassName="message-list" items={group.items.map(bubbleItem)} role={bubbleRoles} />
+          : <ToolTimeline key={group.key} tools={group.items} />
+        )}</div>}
         {state.turnId && !state.messages.some((message) => message.role === 'assistant' && message.markdown) && <DelayedThinking />}
-        {toolItems.length > 0 && <section className="tool-chain"><div className="section-kicker"><AppstoreOutlined /> 工具活动</div><ThoughtChain items={toolItems} /></section>}
         {state.error && <Alert className="inline-error" type="error" showIcon message={state.error.code} description={state.error.msg} />}
       </section>
       <footer className="sender-zone">
@@ -139,7 +138,7 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
           placeholder={ready ? '给 Bingo 发送消息' : '正在读取 Bingo 配置'}
           autoSize={{ minRows: 2, maxRows: 7 }}
           onChange={onDraftChange}
-          onSubmit={(message) => onSubmit(message)}
+          onSubmit={(message) => { followOutputRef.current = true; onSubmit(message) }}
           onCancel={onCancel}
           onPasteFile={(files) => {
             if (attachmentCapability && providerSupportsImages) onAddAttachments([...files])
@@ -180,6 +179,36 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
 }
 
 const CHOOSE_WORKSPACE = '__choose_other_workspace__'
+
+const bubbleRoles = {
+  user: { placement: 'end' as const, variant: 'filled' as const, shape: 'corner' as const, avatar: <Avatar icon={<UserOutlined />} /> },
+  ai: {
+    placement: 'start' as const, variant: 'borderless' as const, avatar: <Avatar className="bingo-avatar" icon={<RobotOutlined />} />,
+    contentRender: (content: unknown) => <AssistantMarkdown markdown={String(content)} />
+  }
+}
+
+type TimelineGroup = { type: 'messages'; key: string; items: ChatMessage[] } | { type: 'tools'; key: string; items: ToolActivity[] }
+
+function timelineGroups(timeline: ChatTimelineItem[]): TimelineGroup[] {
+  const groups: TimelineGroup[] = []
+  for (const item of timeline) {
+    if (item.type === 'tool') {
+      const last = groups.at(-1)
+      if (last?.type === 'tools') last.items.push(item.value)
+      else groups.push({ type: 'tools', key: `tools-${item.value.id}`, items: [item.value] })
+      continue
+    }
+    const last = groups.at(-1)
+    if (last?.type === 'messages') last.items.push(item.value)
+    else groups.push({ type: 'messages', key: `messages-${item.value.id}`, items: [item.value] })
+  }
+  return groups
+}
+
+function ToolTimeline({ tools }: { tools: ToolActivity[] }): React.JSX.Element {
+  return <section className="tool-chain"><div className="section-kicker"><AppstoreOutlined /> 工具活动</div><ThoughtChain items={toolsToThoughts(tools)} /></section>
+}
 
 function workspaceOptions(preferences: WorkspacePreferencesV2): Array<{ value: string; label: string }> {
   const recent = preferences.recentPaths.map((path) => ({ value: path, label: path }))

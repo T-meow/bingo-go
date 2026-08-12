@@ -40,6 +40,24 @@ console.log(JSON.stringify({protocolVersion:1,seq:2,sessionId:null,type:'warning
     expect(onExit).toHaveBeenCalled()
   })
 
+  it('accepts opaque prompt IDs emitted by bingo', async () => {
+    const binary = await fixture(`#!/usr/bin/env node
+let seq=1, id=${JSON.stringify(sessionId)}
+console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.ready',metadata:{bingoVersion:'1.0',protocolVersion:1,sessionId:id,displayName:'Test',transcriptPath:'/tmp/test',resumed:false,cwd:process.cwd(),provider:'default',model:'test',thinkingLevel:'off',permissionMode:'default',theme:'auto',supportsImages:false}}))
+let buffer=''; process.stdin.on('data', chunk => { buffer += chunk; let i; while ((i=buffer.indexOf('\\n')) >= 0) { const line=buffer.slice(0,i); buffer=buffer.slice(i+1); if (!line) continue; const c=JSON.parse(line); if(c.type==='turn.start'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'turn.started',commandId:c.commandId,turnId:c.turnId})); console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'prompt.request',turnId:c.turnId,promptId:'prompt-1',kind:'permission',title:'Allow running Bash',question:'Bash needs permission',options:[{id:'allow',label:'Allow'}],allowFreeText:false})); } else if(c.type==='prompt.respond'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'prompt.resolved',turnId:c.turnId,promptId:c.promptId,commandId:c.commandId,reason:'responded'})); } else if(c.type==='session.close'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.closed',commandId:c.commandId})); process.exit(0); } } })
+`)
+    const events = vi.fn()
+    const onExit = vi.fn()
+    const session = new StdioBingoSession(binary, process.cwd(), { onEvent: events, onExit })
+    await session.open()
+    await session.sendTurn(turnId, 'inspect')
+    await vi.waitFor(() => expect(events).toHaveBeenCalledWith(expect.objectContaining({ type: 'prompt.request', promptId: 'prompt-1' })))
+    await session.respondToPrompt(turnId, 'prompt-1', { kind: 'option', optionId: 'allow' })
+    await vi.waitFor(() => expect(events).toHaveBeenCalledWith(expect.objectContaining({ type: 'prompt.resolved', promptId: 'prompt-1' })))
+    expect(onExit).not.toHaveBeenCalled()
+    await session.close()
+  })
+
   it('waits for bingo-owned rename and delete responses', async () => {
     const binary = await fixture(`#!/usr/bin/env node
 let seq=1, id=${JSON.stringify(sessionId)}

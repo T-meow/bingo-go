@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { App as AntApp, Alert, Button, Input, Modal, Result, Space, Typography } from 'antd'
 import type { CliEvent, PromptResponse, TeamDefinition, TeamSnapshot } from '../../shared/contracts/cli'
 import type {
-  AppInfo, EditableSettings, GuiError, McpServerSettingsInput, ProviderSettingsInput, RendererSessionEvent,
+  AppInfo, EditableSettings, GuiError, McpServerSettingsInput, ModelListOutput, ProviderSettingsInput, RendererSessionEvent,
   RuntimeInfo, RuntimeSettings, SessionOpened, SessionSummary, SettingsSnapshot, WorkspacePreferencesV2
 } from '../../shared/contracts/ipc'
 import { AppShell, type AppView } from './components/AppShell'
@@ -93,6 +93,23 @@ export default function App(): React.JSX.Element {
     })))
   }, [commitAttachments])
 
+  const handleTransportError = useCallback((code: string, msg: string): void => {
+    connection.current = null
+    activeTurnId.current = null
+    setConnected(false)
+    resetAttachmentRegistrations()
+    dispatch({ type: 'transport-error', code, msg })
+  }, [resetAttachmentRegistrations])
+
+  const runSessionOperation = useCallback(async <T,>(operation: Promise<T>): Promise<T | null> => {
+    try {
+      return await withTimeout(operation, 12_000)
+    } catch {
+      handleTransportError('CONNECTION_TIMEOUT', '12 秒内未收到 Bingo 响应，连接已失效。请重试或新建对话。')
+      return null
+    }
+  }, [handleTransportError])
+
   useEffect(() => () => {
     attachmentDraft.current.forEach(revokeAttachmentPreview)
     messagePreviewUrls.current.forEach((url) => URL.revokeObjectURL(url))
@@ -122,6 +139,7 @@ export default function App(): React.JSX.Element {
       const available = uniqueModels(listed.value.models, model)
       setModels(available)
       if (!model) setSelectedModel(available[0] ?? '')
+      setRuntimeSettingsError(listed.value.warning ?? null)
     }
     else {
       setModels(uniqueModels([], model))
@@ -208,7 +226,7 @@ export default function App(): React.JSX.Element {
       if ('turnId' in event.payload && event.payload.turnId && activeTurnId.current && event.payload.turnId !== activeTurnId.current) return
       current.sequence = event.sequence
       if (event.payload.type === 'transport.error') {
-        dispatch({ type: 'transport-error', code: event.payload.error.code, msg: event.payload.error.msg })
+        handleTransportError(event.payload.error.code, event.payload.error.msg)
         return
       }
       const payload = event.payload as CliEvent
@@ -229,7 +247,7 @@ export default function App(): React.JSX.Element {
     })
     void connect()
     return unsubscribe
-  }, [connect])
+  }, [connect, handleTransportError])
 
   const openSession = async (summary: SessionSummary): Promise<void> => {
     if (state.turnId || sessionOperation || attachmentOperation || activeSession?.id === summary.id) return
@@ -326,6 +344,7 @@ export default function App(): React.JSX.Element {
     if (!result.ok) { setRuntimeSettingsError(result.error); return }
     setModels(uniqueModels(result.value.models))
     setSelectedModel(result.value.models[0] ?? '')
+    setRuntimeSettingsError(result.value.warning ?? null)
   }
 
   const saveRuntime = async (): Promise<void> => {
@@ -443,10 +462,12 @@ export default function App(): React.JSX.Element {
         dataUrl: attachment.previewUrl
       }))
     })
-    const result = await window.bingoGui.sendTurn({ connectionId: active.id, turnId, prompt: wirePrompt })
+    const result = await runSessionOperation(window.bingoGui.sendTurn({ connectionId: active.id, turnId, prompt: wirePrompt }))
+    if (!result) return
     if (!result.ok) {
       activeTurnId.current = null
-      dispatch({ type: 'submit-failed', turnId, code: result.error.code, msg: result.error.msg })
+      if (result.error.code === 'CONNECTION_STALE') handleTransportError(result.error.code, result.error.msg)
+      else dispatch({ type: 'submit-failed', turnId, code: result.error.code, msg: result.error.msg })
       return
     }
     setDraft('')
@@ -457,16 +478,24 @@ export default function App(): React.JSX.Element {
   const cancel = async (): Promise<void> => {
     const active = connection.current
     if (!active || !state.turnId) return
-    const result = await window.bingoGui.cancelTurn({ connectionId: active.id, turnId: state.turnId })
-    if (!result.ok) dispatch({ type: 'transport-error', code: result.error.code, msg: result.error.msg })
+    const result = await runSessionOperation(window.bingoGui.cancelTurn({ connectionId: active.id, turnId: state.turnId }))
+    if (!result) return
+    if (!result.ok) {
+      if (result.error.code === 'CONNECTION_STALE') handleTransportError(result.error.code, result.error.msg)
+      else dispatch({ type: 'transport-error', code: result.error.code, msg: result.error.msg })
+    }
   }
 
   const respond = async (response: PromptResponse): Promise<void> => {
     const active = connection.current
     const prompt = state.prompts[0]
     if (!active || !prompt) return
-    const result = await window.bingoGui.respondToPrompt({ connectionId: active.id, turnId: prompt.turnId, promptId: prompt.promptId, response })
-    if (!result.ok) dispatch({ type: 'transport-error', code: result.error.code, msg: result.error.msg })
+    const result = await runSessionOperation(window.bingoGui.respondToPrompt({ connectionId: active.id, turnId: prompt.turnId, promptId: prompt.promptId, response }))
+    if (!result) return
+    if (!result.ok) {
+      if (result.error.code === 'CONNECTION_STALE') handleTransportError(result.error.code, result.error.msg)
+      else dispatch({ type: 'transport-error', code: result.error.code, msg: result.error.msg })
+    }
   }
 
   const loadSettings = async (): Promise<void> => {
@@ -547,11 +576,13 @@ export default function App(): React.JSX.Element {
     return true
   }
 
-  const listModels = useCallback(async (provider: string): Promise<string[] | null> => {
+  const listModels = useCallback(async (provider: string): Promise<ModelListOutput | null> => {
     if (!runtime) return null
+    setSettingsError(null)
     const result = await window.bingoGui.listModels({ workspacePath: runtime.workspacePath, provider })
     if (!result.ok) { setSettingsError(result.error); return null }
-    return uniqueModels(result.value.models)
+    setSettingsError(result.value.warning ?? null)
+    return { ...result.value, models: uniqueModels(result.value.models) }
   }, [runtime])
 
   const acceptTeamSnapshot = (snapshot: TeamSnapshot): void => {

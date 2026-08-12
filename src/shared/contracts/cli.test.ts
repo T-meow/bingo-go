@@ -120,4 +120,29 @@ describe('protocol v1 contracts', () => {
       definition: { schemaVersion: 2 }
     })).toThrow()
   })
+
+  it('treats prompt IDs as opaque protocol identifiers', () => {
+    const event = cliEventSchema.parse({
+      protocolVersion: 1,
+      seq: 2,
+      sessionId: 'session',
+      type: 'prompt.request',
+      turnId: id,
+      promptId: 'prompt-1',
+      kind: 'permission',
+      title: 'Allow running Bash',
+      question: 'Bash needs permission',
+      options: [{ id: 'allow', label: 'Allow' }],
+      allowFreeText: false
+    })
+    expect(event.type).toBe('prompt.request')
+    expect(clientCommandSchema.parse({
+      protocolVersion: 1,
+      type: 'prompt.respond',
+      commandId: id,
+      turnId: id,
+      promptId: 'prompt-1',
+      response: { kind: 'option', optionId: 'allow' }
+    }).type).toBe('prompt.respond')
+  })
 })

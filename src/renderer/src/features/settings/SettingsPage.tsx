@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Alert, App, Button, Descriptions, Empty, Input, InputNumber, List, Segmented, Select, Space, Switch, Tag, Typography } from 'antd'
 import { SaveOutlined, TeamOutlined } from '@ant-design/icons'
 import type {
-  AppInfo, EditableSettings, GuiError, McpServerSettingsInput, PermissionMode, ProviderSettingsInput,
+  AppInfo, EditableSettings, GuiError, McpServerSettingsInput, ModelListOutput, PermissionMode, ProviderSettingsInput,
   RuntimeInfo, SettingsSnapshot
 } from '../../../../shared/contracts/ipc'
 import { AppearanceSettings, SettingsSectionLayout } from './AppearanceSettings'
@@ -26,7 +26,7 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
   onRemoveProvider: (name: string, fallback?: { provider: string; model: string }) => Promise<boolean>
   onUpsertMcp: (server: McpServerSettingsInput) => Promise<boolean>
   onRemoveMcp: (name: string) => Promise<boolean>
-  onListModels: (provider: string) => Promise<string[] | null>
+  onListModels: (provider: string) => Promise<ModelListOutput | null>
 }): React.JSX.Element {
   const { modal, message } = App.useApp()
   const [defaultModels, setDefaultModels] = useState<string[]>([])
@@ -36,8 +36,8 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
     if (section !== 'general' || !provider) return
     let live = true
     setModelsLoading(true)
-    void onListModels(provider).then((models) => {
-      if (live) setDefaultModels(models ?? [])
+    void onListModels(provider).then((result) => {
+      if (live) setDefaultModels(result?.models ?? [])
     }).finally(() => { if (live) setModelsLoading(false) })
     return () => { live = false }
   }, [draft?.provider, section, snapshot?.revision])

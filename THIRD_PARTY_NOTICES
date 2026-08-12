@@ -46,7 +46,8 @@ Bingo
 -----
 Copyright (c) Bingo contributors.
 Licensed under the MIT License. The Bingo executable is distributed without
-modifying its license terms.
+modifying its license terms. Release binaries are built from the pinned v0.4.0
+source plus the repository-maintained protocol v1 patch under vendor/bingo/.
 https://github.com/yexrob/bingo
 
 DiceBear Lorelei avatars

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { cliEventSchema, clientCommandSchema, type CliEvent, type CliInspectionMetadata, type ClientCommand } from '../../shared/contracts/cli'
 import { BingoCommandError } from './bingoSession'
+import { binaryCommand } from './binaryCommand'
 
 const TIMEOUT_MS = 10_000
 
@@ -21,8 +22,8 @@ export class BingoInspector {
     if (this.child) throw new Error('Inspector is already open')
     this.ready = new Promise((resolve, reject) => { this.resolveReady = resolve; this.rejectReady = reject })
     const args = ['--json-events', '--inspect']
-    const scriptBinary = process.platform === 'win32' && /\.(?:mjs|cjs|js)$/i.test(this.binaryPath)
-    const child = spawn(scriptBinary ? process.execPath : this.binaryPath, scriptBinary ? [this.binaryPath, ...args] : args, { cwd: this.cwd, env: this.env, shell: false, stdio: ['pipe', 'pipe', 'pipe'] })
+    const launch = binaryCommand(this.binaryPath, args)
+    const child = spawn(launch.command, launch.args, { cwd: this.cwd, env: this.env, shell: false, windowsVerbatimArguments: launch.windowsVerbatimArguments, stdio: ['pipe', 'pipe', 'pipe'] })
     this.child = child
     child.stdout.setEncoding('utf8')
     child.stdout.on('data', (chunk: string) => this.consume(chunk))

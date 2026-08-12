@@ -61,7 +61,7 @@ function api(list: SessionListOutput, capabilities: string[] = ['settings.inspec
     ] : [], capabilities) })),
     renameSession: vi.fn(), deleteSession: vi.fn(),
     readRuntimeSettings: vi.fn().mockResolvedValue({ ok: true, value: { providers, provider: editable.provider, model: editable.model, thinkingLevel: editable.thinkingLevel, theme: editable.theme } }),
-    listModels: vi.fn().mockResolvedValue({ ok: true, value: { provider: editable.provider, models: [editable.model] } }),
+    listModels: vi.fn().mockResolvedValue({ ok: true, value: { provider: editable.provider, models: [editable.model], source: 'remote' } }),
     saveRuntimeSettings: vi.fn(), readSettings: vi.fn().mockResolvedValue({ ok: true, value: settingsSnapshot }), saveSettings: vi.fn(),
     upsertProvider: vi.fn(), removeProvider: vi.fn(), upsertMcpServer: vi.fn(), removeMcpServer: vi.fn(),
     readTeam: vi.fn().mockResolvedValue({ ok: true, value: teamSnapshot }), validateTeam: vi.fn(), saveTeam: vi.fn(), startTeam: vi.fn(), stopTeam: vi.fn(),

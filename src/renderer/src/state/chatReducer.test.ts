@@ -38,8 +38,8 @@ describe('chatReducer', () => {
       ]
     })
     expect(state.messages).toEqual([
-      { id: 's:1', role: 'user', markdown: 'Remember amber', status: 'done' },
-      { id: 's:2', role: 'assistant', markdown: 'Remembered', status: 'done' }
+      { id: 's:1', turnId: null, role: 'user', markdown: 'Remember amber', status: 'done' },
+      { id: 's:2', turnId: null, role: 'assistant', markdown: 'Remembered', status: 'done' }
     ])
     expect(state.turnId).toBeNull()
   })
@@ -60,5 +60,43 @@ describe('chatReducer', () => {
     })
     expect(state.messages[0].markdown).toBe('')
     expect(state.messages[0].attachments?.[0].name).toBe('screen.png')
+  })
+
+  it('keeps text before and after a tool in chronological timeline segments', () => {
+    let state = chatReducer(initialChatState, { type: 'submit', turnId, prompt: 'inspect' })
+    state = chatReducer(state, { type: 'event', event: { ...base, seq: 1, type: 'turn.started', commandId: turnId } })
+    state = chatReducer(state, { type: 'event', event: { ...base, seq: 2, type: 'text.delta', delta: '先检查。' } })
+    state = chatReducer(state, { type: 'event', event: { ...base, seq: 3, type: 'tool.ready', toolCallId: 'tool-1', name: 'Bash', summary: 'Get-ChildItem' } })
+    state = chatReducer(state, { type: 'event', event: { ...base, seq: 4, type: 'tool.done', toolCallId: 'tool-1', name: 'Bash', summary: 'Get-ChildItem', status: 'done', output: 'README.md', durationMs: 1 } })
+    state = chatReducer(state, { type: 'event', event: { ...base, seq: 5, type: 'text.delta', delta: '检查完成。' } })
+
+    expect(state.timeline.map((item) => item.type)).toEqual(['message', 'message', 'tool', 'message'])
+    expect(state.timeline.flatMap((item) => item.type === 'message' && item.value.role === 'assistant' ? [item.value.markdown] : [])).toEqual(['先检查。', '检查完成。'])
+    expect(state.messages.some((message) => message.role === 'assistant' && !message.markdown)).toBe(false)
+  })
+
+  it('restores tools between messages as settled timeline entries', () => {
+    const state = chatReducer(initialChatState, {
+      type: 'restore',
+      history: [
+        { type: 'message', value: { id: 's:1', role: 'user', markdown: 'inspect' } },
+        { type: 'tool', value: { id: 'tool-1', name: 'Bash', summary: 'Get-ChildItem', status: 'done', output: 'README.md' } },
+        { type: 'message', value: { id: 's:3', role: 'assistant', markdown: 'done' } }
+      ]
+    })
+
+    expect(state.timeline.map((item) => item.type)).toEqual(['message', 'tool', 'message'])
+    expect(state.tools).toEqual([{ id: 'tool-1', turnId: null, name: 'Bash', summary: 'Get-ChildItem', status: 'done', output: 'README.md' }])
+  })
+
+  it('does not duplicate repeated tool.ready events and retains an orphan tool.done event', () => {
+    let state = chatReducer(initialChatState, { type: 'submit', turnId, prompt: 'inspect' })
+    const ready = { ...base, seq: 1, type: 'tool.ready' as const, toolCallId: 'tool-1', name: 'Bash', summary: 'Get-ChildItem' }
+    state = chatReducer(state, { type: 'event', event: ready })
+    state = chatReducer(state, { type: 'event', event: { ...ready, seq: 2 } })
+    state = chatReducer(state, { type: 'event', event: { ...base, seq: 3, type: 'tool.done', toolCallId: 'tool-2', name: 'Read', summary: 'README.md', status: 'done', output: 'ok', durationMs: 1 } })
+
+    expect(state.tools.map((tool) => tool.id)).toEqual(['tool-1', 'tool-2'])
+    expect(state.tools[1]).toMatchObject({ status: 'done', output: 'ok' })
   })
 })

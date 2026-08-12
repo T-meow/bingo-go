@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Alert, App, Button, Drawer, Empty, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import { ApiOutlined, DeleteOutlined, EditOutlined, ExperimentOutlined, PlusOutlined } from '@ant-design/icons'
-import type { GuiError, ProviderSettingsInput, ProviderView, SecretPatch, SettingsSnapshot } from '../../../../shared/contracts/ipc'
+import type { GuiError, ModelListOutput, ProviderSettingsInput, ProviderView, SecretPatch, SettingsSnapshot } from '../../../../shared/contracts/ipc'
 import { ModelPicker } from '../../components/ModelPicker'
 import { SettingsSectionLayout } from './AppearanceSettings'
 
@@ -14,7 +14,7 @@ export function ProviderSettings({ snapshot, error, busy, activeProvider, onUpse
   activeProvider: string
   onUpsert: (provider: ProviderSettingsInput) => Promise<boolean>
   onRemove: (name: string, fallback?: { provider: string; model: string }) => Promise<boolean>
-  onListModels: (provider: string) => Promise<string[] | null>
+  onListModels: (provider: string) => Promise<ModelListOutput | null>
 }): React.JSX.Element {
   const { message, modal } = App.useApp()
   const [editing, setEditing] = useState<ProviderView | 'new' | null>(null)
@@ -51,9 +51,11 @@ export function ProviderSettings({ snapshot, error, busy, activeProvider, onUpse
 
   const test = async (name: string): Promise<void> => {
     setTesting(name)
-    const models = await onListModels(name)
+    const result = await onListModels(name)
     setTesting(null)
-    if (models) void message.success(models.length > 0 ? `连接成功，发现 ${models.length} 个模型` : '连接成功，供应商未返回模型列表')
+    if (!result) return
+    if (result.source === 'remote') void message.success(result.models.length > 0 ? `连接成功，发现 ${result.models.length} 个模型` : '连接成功，供应商未返回模型列表')
+    else void message.warning(`${result.warning?.code ?? 'MODEL_LIST_UNVERIFIED'}：${result.warning?.msg ?? '无法连接供应商'}；已加载 ${result.models.length} 个内置候选，但连接尚未验证`)
   }
 
   const save = async (): Promise<void> => {
@@ -63,10 +65,11 @@ export function ProviderSettings({ snapshot, error, busy, activeProvider, onUpse
     setSaving(false)
     setForm((value) => ({ ...value, apiKey: '', credentialAction: 'unchanged' }))
     if (ok) {
-      const models = await onListModels(form.name.trim())
+      const result = await onListModels(form.name.trim())
       setEditing(null)
-      if (models === null) void message.warning('设置已保存，但该供应商无法自动验证模型列表')
-      else void message.success(models.length ? `设置已保存，发现 ${models.length} 个模型` : '设置已保存；请手工填写模型标识')
+      if (result === null) void message.warning('设置已保存，但该供应商无法自动验证模型列表')
+      else if (result.source === 'fallback') void message.warning(`设置已保存，但连接验证失败：${result.warning?.msg ?? '无法连接供应商'}`)
+      else void message.success(result.models.length ? `设置已保存，发现 ${result.models.length} 个模型` : '设置已保存；请手工填写模型标识')
     }
   }
 
@@ -88,9 +91,11 @@ export function ProviderSettings({ snapshot, error, busy, activeProvider, onUpse
   const loadFallback = async (name: string): Promise<void> => {
     setFallbackProvider(name)
     setFallbackModel('')
-    const nextModels = await onListModels(name) ?? []
+    const result = await onListModels(name)
+    const nextModels = result?.models ?? []
     setFallbackModels(nextModels)
     setFallbackModel(nextModels[0] ?? '')
+    if (result?.source === 'fallback') void message.warning(`未验证替代供应商连接：${result.warning?.msg ?? '无法连接供应商'}`)
   }
 
   const confirmFallbackRemove = async (): Promise<void> => {

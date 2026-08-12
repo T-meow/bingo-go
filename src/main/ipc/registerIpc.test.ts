@@ -4,7 +4,8 @@ import type { RuntimeLocator } from '../runtime/runtimeLocator'
 import type { SessionManager } from '../runtime/sessionManager'
 import type { TranscriptRepository } from '../storage/transcriptRepository'
 import type { SettingsRepository } from '../storage/settingsRepository'
-import { IPC, type Result, type RuntimeSettings, type SessionListOutput, type SessionOpened } from '../../shared/contracts/ipc'
+import { IPC, type ModelListOutput, type Result, type RuntimeSettings, type SessionListOutput, type SessionOpened } from '../../shared/contracts/ipc'
+import { BingoCommandError } from '../runtime/bingoSession'
 
 const electron = vi.hoisted(() => ({
   handlers: new Map<string, (event: IpcMainInvokeEvent, input?: unknown) => unknown>()
@@ -106,5 +107,39 @@ describe('registerIpc session:list', () => {
 
     expect(result).toMatchObject({ ok: false, error: { code: 'CONFIG_INVALID', level: 'field' } })
     expect(settings.saveRuntime).not.toHaveBeenCalled()
+  })
+
+  it('returns fallback models without masking an opencode-go authentication failure', async () => {
+    const sessions = {
+      snapshot: vi.fn().mockReturnValue({ connectionId: crypto.randomUUID(), sessionId: 'session-1', idle: true }),
+      listModels: vi.fn().mockRejectedValue(new BingoCommandError('AUTH_REQUIRED', 'provider "opencode-go" has no API key configured', 'flow', true))
+    }
+    const mainFrame = {}
+    const webContents = { mainFrame }
+    registerIpc({ webContents } as unknown as BrowserWindow, {} as RuntimeLocator, sessions as unknown as SessionManager, {} as TranscriptRepository, {} as SettingsRepository, '/bingo')
+
+    const handler = electron.handlers.get(IPC.settingsListModels)
+    const result = await handler?.({ sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent, { workspacePath: '/tmp', provider: 'opencode-go' }) as Result<ModelListOutput>
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { provider: 'opencode-go', source: 'fallback', warning: { code: 'AUTH_REQUIRED' } }
+    })
+    if (result.ok) expect(result.value.models).toContain('deepseek-v4-flash')
+  })
+
+  it('returns a specific code for a stale renderer connection', async () => {
+    const sessions = { cancel: vi.fn().mockRejectedValue(new Error('Connection is stale')) }
+    const mainFrame = {}
+    const webContents = { mainFrame }
+    registerIpc({ webContents } as unknown as BrowserWindow, {} as RuntimeLocator, sessions as unknown as SessionManager, {} as TranscriptRepository, {} as SettingsRepository, '/bingo')
+
+    const handler = electron.handlers.get(IPC.sessionCancel)
+    const result = await handler?.({ sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent, {
+      connectionId: crypto.randomUUID(),
+      turnId: crypto.randomUUID()
+    }) as Result<unknown>
+
+    expect(result).toMatchObject({ ok: false, error: { code: 'CONNECTION_STALE', msg: 'Connection is stale' } })
   })
 })

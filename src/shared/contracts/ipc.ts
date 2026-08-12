@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { teamDefinitionSchema, type CliEvent, type CliSessionMetadata, type PromptResponse, type TeamDefinition, type TeamSnapshot } from './cli'
+import { promptIdSchema, teamDefinitionSchema, type CliEvent, type CliSessionMetadata, type PromptResponse, type TeamDefinition, type TeamSnapshot } from './cli'
 
 export const IPC = {
   appGetInfo: 'app:get-info', runtimeProbe: 'runtime:probe', workspaceGet: 'workspace:get', workspaceSelect: 'workspace:select', sessionOpen: 'session:open', sessionClose: 'session:close',
@@ -25,7 +25,11 @@ export type WorkspaceSelectionResult =
   | { canceled: true; preferences: WorkspacePreferencesV2 }
   | { canceled: false; changed: boolean; runtime: RuntimeInfo; preferences: WorkspacePreferencesV2 }
 export type RendererSessionMetadata = Omit<CliSessionMetadata, 'transcriptPath'>
-export type RendererCliPayload = Exclude<CliEvent, { type: 'protocol.ready' | 'inspection.ready' | 'session.ready' }> | {
+export type RendererBingoEvent = Exclude<CliEvent, { type: 'protocol.ready' | 'inspection.ready' | 'session.ready' }>
+export function isRendererBingoEvent(event: CliEvent): event is RendererBingoEvent {
+  return event.type !== 'protocol.ready' && event.type !== 'inspection.ready' && event.type !== 'session.ready'
+}
+export type RendererCliPayload = RendererBingoEvent | {
   type: 'transport.error'; error: GuiError; exitCode: number | null; signal: string | null
 }
 export type RendererSessionEvent = { connectionId: string; sequence: number; payload: RendererCliPayload }
@@ -39,6 +43,9 @@ export type MessageImageAttachment = {
 export type SessionHistoryItem = {
   type: 'message'
   value: { id: string; role: 'user' | 'assistant'; markdown: string; attachments?: MessageImageAttachment[] }
+} | {
+  type: 'tool'
+  value: { id: string; name: string; summary: string; status: 'done' | 'error' | 'interrupted'; output?: string }
 }
 export type SessionListOutput = { sessions: SessionSummary[]; warnings: string[] }
 export type SessionOpened = { connectionId: string; metadata: RendererSessionMetadata; history: SessionHistoryItem[] }
@@ -55,6 +62,7 @@ export type ProviderView = {
   editable?: boolean
 }
 export type RuntimeSettings = { providers: ProviderView[]; provider: string; model: string; thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'; theme: 'auto' | 'dark' | 'light' }
+export type ModelListOutput = { provider: string; models: string[]; source: 'remote' | 'fallback'; warning?: GuiError }
 export type PermissionMode = 'default' | 'acceptEdits' | 'plan' | 'dontAsk' | 'bypassPermissions'
 export type EditableSettings = {
   apiBaseUrl: string
@@ -219,7 +227,7 @@ export const sessionAttachmentInputSchema = z.object({
 })
 export const sessionTurnInputSchema = z.object({ connectionId: uuid, turnId: uuid })
 export const sessionPromptInputSchema = sessionTurnInputSchema.extend({
-  promptId: uuid,
+  promptId: promptIdSchema,
   response: z.discriminatedUnion('kind', [z.object({ kind: z.literal('option'), optionId: z.string() }), z.object({ kind: z.literal('text'), text: z.string().max(100_000) }), z.object({ kind: z.literal('cancel') })])
 })
 export const visualCaptureInputSchema = z.object({ runId: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/), theme: z.enum(['dark', 'light']), state: z.enum(['chat', 'empty', 'loading', 'error']), viewport: z.enum(['1440x900', '800x600']) })
@@ -234,7 +242,7 @@ export type BingoGuiApi = {
   renameSession(input: { sessionId: string; name: string }): Promise<Result<{ previousId: string; session: SessionSummary }>>
   deleteSession(input: { sessionId: string }): Promise<Result<{ deletedId: string }>>
   readRuntimeSettings(input: { workspacePath: string }): Promise<Result<RuntimeSettings>>
-  listModels(input: { workspacePath: string; provider: string }): Promise<Result<{ provider: string; models: string[] }>>
+  listModels(input: { workspacePath: string; provider: string }): Promise<Result<ModelListOutput>>
   saveRuntimeSettings(input: { workspacePath: string; provider: string; model: string; thinkingLevel: RuntimeSettings['thinkingLevel'] }): Promise<Result<{ connectionId?: string; settings: RuntimeSettings }>>
   readSettings(input: { workspacePath: string }): Promise<Result<SettingsSnapshot>>
   saveSettings(input: { workspacePath: string; baseRevision: string; values: EditableSettings }): Promise<Result<{ connectionId?: string; snapshot: SettingsSnapshot }>>

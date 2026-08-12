@@ -2,12 +2,12 @@ import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'el
 import {
   IPC, appearanceSaveInputSchema, connectionInputSchema, mcpServerRemoveInputSchema, mcpServerSettingsInputSchema, modelListInputSchema, providerRemoveInputSchema, providerSettingsInputSchema, runtimeSettingsInputSchema, runtimeSettingsSaveInputSchema, settingsSaveInputSchema, sessionAttachmentInputSchema, sessionDeleteInputSchema, sessionOpenInputSchema, sessionPromptInputSchema, sessionRenameInputSchema, sessionSendInputSchema,
   sessionTurnInputSchema, teamChannelInputSchema, teamChannelPostInputSchema, teamMemberInputSchema, teamMessageInputSchema, teamSaveInputSchema, visualCaptureInputSchema, workspaceSelectInputSchema, type AppInfo, type RendererSessionEvent, type Result,
-  type RuntimeInfo, type RuntimeSettings, type SessionOpened, type SettingsSnapshot, type WorkspacePreferencesV2, type WorkspaceSelectionResult
+  type GuiError, type ModelListOutput, type RuntimeInfo, type RuntimeSettings, type SessionOpened, type SettingsSnapshot, type WorkspacePreferencesV2, type WorkspaceSelectionResult
 } from '../../shared/contracts/ipc'
 import { RuntimeLocator } from '../runtime/runtimeLocator'
 import { BingoInspector } from '../runtime/bingoInspector'
 import { BingoCommandError } from '../runtime/bingoSession'
-import { SessionManager } from '../runtime/sessionManager'
+import { SessionManager, type ManagedSessionEvent } from '../runtime/sessionManager'
 import { SettingsRepository } from '../storage/settingsRepository'
 import { AppearanceRepository } from '../storage/appearanceRepository'
 import { TranscriptRepository } from '../storage/transcriptRepository'
@@ -51,12 +51,13 @@ export function registerIpc(
   const trusted = (event: IpcMainInvokeEvent): void => {
     if (event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) throw new Error('Untrusted IPC sender')
   }
-  const operationalError = <T>(error: unknown): Result<T> => {
-    if (error instanceof BingoCommandError) return { ok: false, error: { code: error.code, msg: error.message, level: error.level, recoverable: error.recoverable } }
+  const guiError = (error: unknown): GuiError => {
+    if (error instanceof BingoCommandError) return { code: error.code, msg: error.message, level: error.level, recoverable: error.recoverable }
     const message = error instanceof Error ? error.message : 'The operation failed. Retry.'
-    const knownCode = message.startsWith('SETTINGS_CONFLICT:') ? 'SETTINGS_CONFLICT' : message.startsWith('CONFIG_SHADOWED:') ? 'CONFIG_SHADOWED' : message.startsWith('Cannot read ') ? 'CONFIG_INVALID' : null
-    return { ok: false, error: { code: knownCode ?? 'OPERATION_FAILED', msg: message.replace(/^[A-Z_]+:\s*/, ''), level: knownCode === 'CONFIG_INVALID' ? 'flow' : 'page', recoverable: true, action: 'retry' } }
+    const knownCode = message.startsWith('SETTINGS_CONFLICT:') ? 'SETTINGS_CONFLICT' : message.startsWith('CONFIG_SHADOWED:') ? 'CONFIG_SHADOWED' : message.startsWith('Cannot read ') ? 'CONFIG_INVALID' : message === 'Connection is stale' ? 'CONNECTION_STALE' : null
+    return { code: knownCode ?? 'OPERATION_FAILED', msg: message.replace(/^[A-Z_]+:\s*/, ''), level: knownCode === 'CONFIG_INVALID' ? 'flow' : 'page', recoverable: true, action: 'retry' }
   }
+  const operationalError = <T>(error: unknown): Result<T> => ({ ok: false, error: guiError(error) })
   const handle = <TInput, TOutput>(channel: string, schema: { parse(value: unknown): TInput }, operation: (input: TInput) => Promise<TOutput>): void => {
     ipcMain.handle(channel, async (event, raw): Promise<Result<TOutput>> => {
       trusted(event)
@@ -81,12 +82,12 @@ export function registerIpc(
     const active = sessions.snapshot()
     return active?.idle ? sessions.listModels(provider) : withInspector(workspacePath, (inspector) => inspector.listModels(provider))
   }
-  const readModels = async (workspacePath: string, provider: string): Promise<string[]> => {
+  const readModels = async (workspacePath: string, provider: string): Promise<ModelListOutput> => {
     const fallback = provider === 'opencode-go' ? OPENCODE_GO_FALLBACK_MODELS : []
     try {
-      return mergeModels(await readRemoteModels(workspacePath, provider), fallback)
+      return { provider, models: mergeModels(await readRemoteModels(workspacePath, provider), fallback), source: 'remote' }
     } catch (error) {
-      if (fallback.length > 0) return [...fallback]
+      if (fallback.length > 0) return { provider, models: [...fallback], source: 'fallback', warning: guiError(error) }
       throw error
     }
   }
@@ -122,7 +123,7 @@ export function registerIpc(
     const selected = providers.find((item) => item.name === provider)
     if (!selected) throw new BingoCommandError('CONFIG_INVALID', `Provider "${provider}" is not available. Choose a listed provider.`, 'field', true)
     let models: string[]
-    try { models = await readModels(workspacePath, provider) } catch (error) {
+    try { models = (await readModels(workspacePath, provider)).models } catch (error) {
       if (!selected.builtin) return providers
       throw error
     }
@@ -198,8 +199,7 @@ export function registerIpc(
   handle(IPC.sessionDelete, sessionDeleteInputSchema, async ({ sessionId }) => ({ deletedId: await sessions.delete(sessionId) }))
   handle(IPC.settingsReadRuntime, runtimeSettingsInputSchema, async ({ workspacePath }) => readRuntimeSettings(workspacePath))
   handle(IPC.settingsListModels, modelListInputSchema, async ({ workspacePath, provider }) => {
-    const models = await readModels(workspacePath, provider)
-    return { provider, models }
+    return readModels(workspacePath, provider)
   })
   handle(IPC.settingsSaveRuntime, runtimeSettingsSaveInputSchema, async ({ workspacePath, provider, model, thinkingLevel }) => {
     const active = sessions.snapshot()
@@ -277,6 +277,7 @@ export function registerIpc(
   }
 }
 
-export function sendSessionEvent(window: BrowserWindow, event: RendererSessionEvent): void {
-  if (!window.isDestroyed()) window.webContents.send(IPC.sessionEvent, event)
+export function sendSessionEvent(window: BrowserWindow, event: ManagedSessionEvent): void {
+  const rendererEvent: RendererSessionEvent = { connectionId: event.connectionId, sequence: event.sequence, payload: event.payload }
+  if (!window.isDestroyed()) window.webContents.send(IPC.sessionEvent, rendererEvent)
 }

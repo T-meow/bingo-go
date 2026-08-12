@@ -4,6 +4,7 @@ import { constants } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { cliEventSchema } from '../../shared/contracts/cli'
 import type { GuiError, Result, RuntimeInfo } from '../../shared/contracts/ipc'
+import { binaryCommand } from './binaryCommand'
 
 const PROBE_TIMEOUT_MS = 10_000
 
@@ -95,8 +96,8 @@ export class RuntimeLocator {
   private probeProtocol(binary: string, cwd: string, env: NodeJS.ProcessEnv): Promise<Result<{ bingoVersion: string; capabilities: string[] }>> {
     return new Promise((resolve) => {
       const args = ['--json-events', '--probe']
-      const scriptBinary = process.platform === 'win32' && /\.(?:mjs|cjs|js)$/i.test(binary)
-      const child = spawn(scriptBinary ? process.execPath : binary, scriptBinary ? [binary, ...args] : args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+      const launch = binaryCommand(binary, args)
+      const child = spawn(launch.command, launch.args, { cwd, env, windowsVerbatimArguments: launch.windowsVerbatimArguments, stdio: ['ignore', 'pipe', 'pipe'] })
       let stdout = ''
       let settled = false
       let timer: NodeJS.Timeout

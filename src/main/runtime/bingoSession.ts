@@ -2,8 +2,10 @@ import type { CliEvent, CliSessionMetadata, PromptResponse, TeamDefinition, Team
 
 export type BingoSessionHandlers = {
   onEvent: (event: CliEvent) => void
-  onExit: (error: Error | null) => void
+  onExit: (error: Error | null, exit: BingoSessionExit) => void
 }
+
+export type BingoSessionExit = { exitCode: number | null; signal: string | null }
 
 export class BingoCommandError extends Error {
   constructor(
