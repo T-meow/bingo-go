@@ -1,0 +1,63 @@
+Bingo Go Third-Party Notices
+============================
+
+This distribution includes third-party software and assets. The complete
+dependency graph and exact versions are recorded in package-lock.json and, for
+the bundled Bingo binary, Cargo.lock.
+
+Rei
+---
+Bingo Go is derived from Rei source code and retains its MIT terms. Bingo Go
+uses an independent Git history; this notice records source provenance rather
+than a shared repository lineage.
+Copyright (c) 2026 Rei contributors.
+https://github.com/yexrob/rei
+
+Ant Design X
+------------
+Copyright (c) Ant Group Co., Ltd.
+Licensed under the MIT License.
+https://github.com/ant-design/x
+
+Ant Design and @ant-design/icons
+--------------------------------
+Copyright (c) Ant Group Co., Ltd.
+Licensed under the MIT License.
+https://github.com/ant-design/ant-design
+https://github.com/ant-design/ant-design-icons
+
+React and react-markdown
+------------------------
+React is Copyright (c) Meta Platforms, Inc. and affiliates and is licensed
+under the MIT License. react-markdown and its dependency family are included
+under their respective permissive licenses as recorded in package-lock.json.
+https://github.com/facebook/react
+https://github.com/remarkjs/react-markdown
+
+Electron and Chromium
+---------------------
+Electron is Copyright (c) Electron contributors and is licensed under the MIT
+License. Electron includes Chromium, Node.js, and other components distributed
+under their respective notices and licenses. Electron's bundled LICENSES file
+is retained in the packaged runtime.
+https://github.com/electron/electron
+
+Bingo
+-----
+Copyright (c) Bingo contributors.
+Licensed under the MIT License. The Bingo executable is distributed without
+modifying its license terms.
+https://github.com/yexrob/bingo
+
+DiceBear Lorelei avatars
+------------------------
+The eight Bingo message portraits use the Lorelei style by Lisa Wischofsky,
+rendered through DiceBear. They are dedicated to the public domain under
+CC0 1.0. Attribution is not required and is included here for provenance.
+https://www.dicebear.com/styles/lorelei/
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Additional dependencies
+-----------------------
+Other npm and Cargo dependencies retain their original copyright notices and
+license terms. No dependency is relicensed by this notice.

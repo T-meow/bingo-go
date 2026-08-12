@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+release/
+resources/bin/win32-x64/bingo.exe
+*.tsbuildinfo
+
+# Electron
+*.log
+npm-debug.log*
+
+# Screenshots / local artifacts
+screenshots/
+!docs/screenshots/
+!docs/screenshots/**/*.png
+*.png
+!build/icon.png
+!docs/screenshots/**/*.png
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+.bingo/

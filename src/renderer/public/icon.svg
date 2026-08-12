@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Bingo Go</title>
+  <desc id="desc">A fresh three-by-three bingo grid with a highlighted center space.</desc>
+  <rect x="64" y="64" width="896" height="896" rx="224" fill="#ECF8F4"/>
+  <rect x="216" y="216" width="160" height="160" rx="48" fill="#1F8A7A"/>
+  <rect x="432" y="216" width="160" height="160" rx="48" fill="#4C9FD6"/>
+  <rect x="648" y="216" width="160" height="160" rx="48" fill="#1F8A7A"/>
+  <rect x="216" y="432" width="160" height="160" rx="48" fill="#4C9FD6"/>
+  <circle cx="512" cy="512" r="80" fill="#F26B5B"/>
+  <rect x="648" y="432" width="160" height="160" rx="48" fill="#4C9FD6"/>
+  <rect x="216" y="648" width="160" height="160" rx="48" fill="#1F8A7A"/>
+  <rect x="432" y="648" width="160" height="160" rx="48" fill="#4C9FD6"/>
+  <rect x="648" y="648" width="160" height="160" rx="48" fill="#1F8A7A"/>
+</svg>
