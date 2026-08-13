@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import { Actions, Attachments, Bubble, Prompts, Sender, ThoughtChain, Welcome, type BubbleItemType, type ThoughtChainItemType } from '@ant-design/x'
-import { AppstoreOutlined, CheckCircleOutlined, CheckOutlined, CopyOutlined, FolderOpenOutlined, PaperClipOutlined, RobotOutlined, SafetyCertificateOutlined, SendOutlined, UserOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Image, Input, Modal, Select, Space, Tag, Tooltip, Typography, Upload } from 'antd'
+import { AppstoreOutlined, CheckCircleOutlined, CheckOutlined, CopyOutlined, DownOutlined, FolderOpenOutlined, PaperClipOutlined, RobotOutlined, SafetyCertificateOutlined, SendOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
+import { Alert, Avatar, Button, Image, Input, Modal, Popover, Select, Space, Tag, Tooltip, Typography, Upload } from 'antd'
 import type { PromptResponse } from '../../../../shared/contracts/cli'
 import type { GuiError, MessageImageAttachment, RuntimeSettings, SessionSummary, WorkspacePreferencesV2 } from '../../../../shared/contracts/ipc'
 import { ModelPicker } from '../../components/ModelPicker'
 import type { ChatMessage, ChatState, ChatTimelineItem, PromptRequest, ToolActivity } from '../../state/chatReducer'
 import { IMAGE_ACCEPT, MAX_ATTACHMENTS, type ComposerImageAttachment } from './attachments'
 
-export function ChatPage({ state, activeSession, ready, connected, sessionOperation, runtimeSettings, selectedProvider, selectedModel, models, thinkingLevel, settingsError, savingRuntime, draft, attachments, attachmentCapability, workspacePreferences, workspaceBusy, onDraftChange, onAddAttachments, onRemoveAttachment, onWorkspaceChange, onProviderChange, onModelChange, onThinkingChange, onSaveRuntime, onSubmit, onCancel, onRespond }: {
+export function ChatPage({ state, activeSession, ready, connected, sessionOperation, runtimeSettings, selectedProvider, selectedModel, models, thinkingLevel, settingsError, savingRuntime, draft, attachments, attachmentCapability, workspacePreferences, workspaceBusy, selectedToolId, onSelectTool, onDraftChange, onAddAttachments, onRemoveAttachment, onWorkspaceChange, onProviderChange, onModelChange, onThinkingChange, onSaveRuntime, onSubmit, onCancel, onRespond }: {
   state: ChatState
   activeSession: SessionSummary | null
   ready: boolean
@@ -27,6 +27,8 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
   attachmentCapability: boolean
   workspacePreferences: WorkspacePreferencesV2 | null
   workspaceBusy: boolean
+  selectedToolId: string | null
+  onSelectTool: (toolId: string) => void
   onDraftChange: (value: string) => void
   onAddAttachments: (files: File[]) => void
   onRemoveAttachment: (id: string) => void
@@ -42,21 +44,26 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
   const attachmentsRef = useRef<React.ComponentRef<typeof Attachments>>(null)
   const chatScrollRef = useRef<HTMLElement>(null)
   const followOutputRef = useRef(true)
+  const [showScrollButton, setShowScrollButton] = useState(false)
   const prompt = state.prompts[0]
-  const bubbleItem = (message: ChatMessage): BubbleItemType => ({
-    key: message.id,
-    role: message.role === 'assistant' ? 'ai' : 'user',
-    content: message.role === 'user'
-      ? <MessageContent markdown={message.markdown} attachments={message.attachments} />
-      : message.markdown,
-    contentRender: message.role === 'assistant'
-      ? () => <AssistantMessage markdown={message.markdown} attachments={message.attachments} />
-      : undefined,
-    streaming: message.status === 'streaming',
-    status: message.status === 'interrupted' ? 'abort' : message.status === 'streaming' ? 'updating' : 'success',
-    footer: message.role === 'assistant' && message.markdown
-      ? <Actions items={[{ key: 'copy', label: '复制', icon: <CopyOutlined />, onItemClick: () => void navigator.clipboard?.writeText(message.markdown) }]} />
-      : undefined
+  const bubbleItems = conversationItems(state.timeline).map((item): BubbleItemType => {
+    if (item.role === 'user') return {
+      key: item.key,
+      role: 'user',
+      content: <MessageContent markdown={item.message.markdown} attachments={item.message.attachments} />
+    }
+    const messages = item.blocks.flatMap((block) => block.type === 'message' ? [block.value] : [])
+    const markdown = messages.map((message) => message.markdown).filter(Boolean).join('\n\n')
+    const streaming = messages.some((message) => message.status === 'streaming') || item.blocks.some((block) => block.type === 'tool' && block.value.status === 'running')
+    const interrupted = messages.some((message) => message.status === 'interrupted')
+    return {
+      key: item.key,
+      role: 'ai',
+      content: <AssistantTurn blocks={item.blocks} selectedToolId={selectedToolId} onSelectTool={onSelectTool} />,
+      streaming,
+      status: interrupted ? 'abort' : streaming ? 'updating' : 'success',
+      footer: markdown ? <Actions items={[{ key: 'copy', label: '复制', icon: <CopyOutlined />, onItemClick: () => void navigator.clipboard?.writeText(markdown) }]} /> : undefined
+    }
   })
   const provider = runtimeSettings?.providers.find((item) => item.name === selectedProvider)
   const runtimeDirty = Boolean(runtimeSettings && (selectedProvider !== runtimeSettings.provider || selectedModel !== runtimeSettings.model || thinkingLevel !== runtimeSettings.thinkingLevel))
@@ -88,10 +95,20 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
   }, [])
   useEffect(() => {
     const scroll = chatScrollRef.current
-    if (scroll && followOutputRef.current) scroll.scrollTop = scroll.scrollHeight
+    if (scroll && followOutputRef.current) {
+      scroll.scrollTop = scroll.scrollHeight
+      setShowScrollButton(false)
+    }
   }, [state.timeline, state.error])
+  const scrollToLatest = (): void => {
+    const scroll = chatScrollRef.current
+    if (!scroll) return
+    followOutputRef.current = true
+    setShowScrollButton(false)
+    scroll.scrollTo({ top: scroll.scrollHeight, behavior: 'smooth' })
+  }
   return (
-    <main className="chat-page" data-qa-state={state.turnId ? 'loading' : state.messages.length ? 'chat' : 'empty'}>
+    <main className={`chat-page${state.timeline.length === 0 && !state.turnId ? ' is-empty' : ''}`} data-qa-state={state.turnId ? 'loading' : state.messages.length ? 'chat' : 'empty'}>
       <header className="page-toolbar chat-toolbar">
         <div className="page-heading"><span>本地对话</span><h1>{activeSession?.name ?? '新对话'}</h1></div>
       </header>
@@ -99,15 +116,14 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
       <section ref={chatScrollRef} className="chat-scroll" aria-live="polite" onScroll={(event) => {
         const scroll = event.currentTarget
         followOutputRef.current = scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 80
+        setShowScrollButton(!followOutputRef.current)
       }}>
         {state.timeline.length === 0 && !state.turnId && <EmptyChat onPrompt={(value) => { onDraftChange(value) }} />}
-        {state.timeline.length > 0 && <div className="chat-timeline">{timelineGroups(state.timeline).map((group) => group.type === 'messages'
-          ? <Bubble.List key={group.key} rootClassName="message-list" items={group.items.map(bubbleItem)} role={bubbleRoles} />
-          : <ToolTimeline key={group.key} tools={group.items} />
-        )}</div>}
-        {state.turnId && !state.messages.some((message) => message.role === 'assistant' && message.markdown) && <DelayedThinking />}
+        {state.timeline.length > 0 && <Bubble.List rootClassName="message-list" items={bubbleItems} role={bubbleRoles} />}
+        {state.turnId && !state.messages.some((message) => message.role === 'assistant' && message.markdown) && !state.tools.some((tool) => tool.turnId === state.turnId) && <DelayedThinking />}
         {state.error && <Alert className="inline-error" type="error" showIcon message={state.error.code} description={state.error.msg} />}
       </section>
+      {showScrollButton && <Tooltip title="回到最新消息"><Button className="scroll-latest" shape="circle" icon={<DownOutlined />} aria-label="回到最新消息" onClick={scrollToLatest} /></Tooltip>}
       <footer className="sender-zone">
         {attachmentCapability && attachments.length > 0 && <Attachments
           className="composer-attachments"
@@ -165,10 +181,14 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
               options={workspaceOptions(workspacePreferences)}
               onChange={(value) => onWorkspaceChange(value === CHOOSE_WORKSPACE ? undefined : value)}
             />}
-            <Select aria-label="Provider" size="small" variant="borderless" value={selectedProvider} popupMatchSelectWidth={false} disabled={controlsDisabled} options={runtimeSettings.providers.map((item) => ({ value: item.name, label: `${item.name}${item.credentialConfigured ? '' : ' · 未配置'}` }))} onChange={onProviderChange} />
-            <ModelPicker ariaLabel="Model" className="composer-model-picker" value={selectedModel} models={models} size="small" variant="borderless" disabled={controlsDisabled} onChange={onModelChange} />
-            <Select aria-label="Thinking level" size="small" variant="borderless" value={thinkingLevel} popupMatchSelectWidth={false} disabled={controlsDisabled} options={thinkingOptions} onChange={onThinkingChange} />
-            <Button type={runtimeDirty ? 'primary' : 'text'} size="small" icon={<CheckOutlined />} loading={savingRuntime} disabled={!runtimeDirty || !selectedModel.trim() || controlsDisabled} onClick={onSaveRuntime}>应用</Button>
+            <Popover placement="topLeft" trigger="click" content={<div className="runtime-profile-popover">
+              <label><span>Provider</span><Select aria-label="Provider" value={selectedProvider} popupMatchSelectWidth={false} disabled={controlsDisabled} options={runtimeSettings.providers.map((item) => ({ value: item.name, label: `${item.name}${item.credentialConfigured ? '' : ' · 未配置'}` }))} onChange={onProviderChange} /></label>
+              <label><span>Model</span><ModelPicker ariaLabel="Model" value={selectedModel} models={models} disabled={controlsDisabled} onChange={onModelChange} /></label>
+              <label><span>Thinking</span><Select aria-label="Thinking level" value={thinkingLevel} popupMatchSelectWidth={false} disabled={controlsDisabled} options={thinkingOptions} onChange={onThinkingChange} /></label>
+              <Button block type="primary" icon={<CheckOutlined />} loading={savingRuntime} disabled={!runtimeDirty || !selectedModel.trim() || controlsDisabled} onClick={onSaveRuntime}>应用会话配置</Button>
+            </div>}>
+              <Button className="runtime-profile-button" type={runtimeDirty ? 'primary' : 'text'} size="small" icon={<RobotOutlined />} disabled={controlsDisabled}>{selectedModel || selectedProvider || '选择模型'} · {thinkingLevel}</Button>
+            </Popover>
           </Space>}
           <Typography.Text type="secondary" className="sender-status">{state.turnId ? 'Bingo 正在处理，可随时停止' : sessionOperation ? '正在准备对话' : connected ? '会话已连接' : ready ? '首次发送时创建对话' : '等待运行时'}</Typography.Text>
         </div>
@@ -183,31 +203,51 @@ const CHOOSE_WORKSPACE = '__choose_other_workspace__'
 const bubbleRoles = {
   user: { placement: 'end' as const, variant: 'filled' as const, shape: 'corner' as const, avatar: <Avatar icon={<UserOutlined />} /> },
   ai: {
-    placement: 'start' as const, variant: 'borderless' as const, avatar: <Avatar className="bingo-avatar" icon={<RobotOutlined />} />,
-    contentRender: (content: unknown) => <AssistantMarkdown markdown={String(content)} />
+    placement: 'start' as const, variant: 'borderless' as const, avatar: <Avatar className="bingo-avatar" icon={<RobotOutlined />} />
   }
 }
 
-type TimelineGroup = { type: 'messages'; key: string; items: ChatMessage[] } | { type: 'tools'; key: string; items: ToolActivity[] }
+type ConversationItem =
+  | { role: 'user'; key: string; message: ChatMessage }
+  | { role: 'ai'; key: string; blocks: ChatTimelineItem[] }
 
-function timelineGroups(timeline: ChatTimelineItem[]): TimelineGroup[] {
-  const groups: TimelineGroup[] = []
+function conversationItems(timeline: ChatTimelineItem[]): ConversationItem[] {
+  const items: ConversationItem[] = []
   for (const item of timeline) {
-    if (item.type === 'tool') {
-      const last = groups.at(-1)
-      if (last?.type === 'tools') last.items.push(item.value)
-      else groups.push({ type: 'tools', key: `tools-${item.value.id}`, items: [item.value] })
+    if (item.type === 'message' && item.value.role === 'user') {
+      items.push({ role: 'user', key: item.value.id, message: item.value })
       continue
     }
-    const last = groups.at(-1)
-    if (last?.type === 'messages') last.items.push(item.value)
-    else groups.push({ type: 'messages', key: `messages-${item.value.id}`, items: [item.value] })
+    const last = items.at(-1)
+    if (last?.role === 'ai') last.blocks.push(item)
+    else items.push({ role: 'ai', key: `assistant-turn-${item.value.id}`, blocks: [item] })
   }
-  return groups
+  return items
 }
 
-function ToolTimeline({ tools }: { tools: ToolActivity[] }): React.JSX.Element {
-  return <section className="tool-chain"><div className="section-kicker"><AppstoreOutlined /> 工具活动</div><ThoughtChain items={toolsToThoughts(tools)} /></section>
+function AssistantTurn({ blocks, selectedToolId, onSelectTool }: { blocks: ChatTimelineItem[]; selectedToolId: string | null; onSelectTool: (toolId: string) => void }): React.JSX.Element {
+  const groups: Array<{ type: 'messages'; items: ChatMessage[] } | { type: 'tools'; items: ToolActivity[] }> = []
+  blocks.forEach((block) => {
+    const type = block.type === 'message' ? 'messages' : 'tools'
+    const last = groups.at(-1)
+    if (last?.type === type) {
+      if (last.type === 'messages' && block.type === 'message') last.items.push(block.value)
+      if (last.type === 'tools' && block.type === 'tool') last.items.push(block.value)
+    } else if (block.type === 'message') groups.push({ type: 'messages', items: [block.value] })
+    else groups.push({ type: 'tools', items: [block.value] })
+  })
+  return <div className="assistant-turn">{groups.map((group, index) => group.type === 'messages'
+    ? <div key={`messages-${index}`} className="assistant-message-segments">{group.items.map((message) => <AssistantMessage key={message.id} markdown={message.markdown} attachments={message.attachments} />)}</div>
+    : <ToolActivityGroup key={`tools-${group.items[0].id}`} tools={group.items} selectedToolId={selectedToolId} onSelectTool={onSelectTool} />
+  )}</div>
+}
+
+function ToolActivityGroup({ tools, selectedToolId, onSelectTool }: { tools: ToolActivity[]; selectedToolId: string | null; onSelectTool: (toolId: string) => void }): React.JSX.Element {
+  const running = tools.filter((tool) => tool.status === 'running').length
+  return <section className="message-tool-chain">
+    <div className="section-kicker"><ToolOutlined /> {running ? `${running} 项工具正在运行` : `${tools.length} 项工具活动`}</div>
+    <ThoughtChain items={toolsToThoughts(tools, onSelectTool, selectedToolId)} />
+  </section>
 }
 
 function workspaceOptions(preferences: WorkspacePreferencesV2): Array<{ value: string; label: string }> {
@@ -282,10 +322,18 @@ const thinkingOptions: Array<{ value: RuntimeSettings['thinkingLevel']; label: s
   { value: 'max', label: 'Thinking Max' }
 ]
 
-export function ChatInspector({ tools }: { tools: ToolActivity[] }): React.JSX.Element {
-  return <div className="inspector-content"><header><span>运行检查器</span><strong>本轮活动</strong></header>{tools.length === 0
+export function ChatInspector({ tools, selectedToolId, onSelectTool }: { tools: ToolActivity[]; selectedToolId: string | null; onSelectTool: (toolId: string) => void }): React.JSX.Element {
+  const selected = tools.find((tool) => tool.id === selectedToolId) ?? tools.at(-1)
+  return <div className="inspector-content"><header><span>运行检查器</span><strong>{tools.length ? `${tools.length} 项工具活动` : '会话活动'}</strong></header>{tools.length === 0
     ? <div className="inspector-empty"><CheckCircleOutlined /><span>当前没有工具活动</span></div>
-    : <ThoughtChain items={toolsToThoughts(tools)} />}</div>
+    : <>
+      <div className="inspector-tool-list" role="list">{tools.map((tool) => <button key={tool.id} type="button" className={`inspector-tool-row${selected?.id === tool.id ? ' active' : ''}`} onClick={() => onSelectTool(tool.id)}>
+        <span className={`tool-status-dot ${tool.status}`} />
+        <span><strong>{tool.name}</strong><small>{tool.summary}</small></span>
+        <time>{formatDuration(tool.durationMs, tool.status)}</time>
+      </button>)}</div>
+      {selected && <section className="inspector-tool-detail"><div className="section-kicker"><ToolOutlined /> 活动详情</div><dl className="inspector-details"><dt>工具</dt><dd>{selected.name}</dd><dt>状态</dt><dd>{toolStatusLabel(selected.status)}</dd><dt>摘要</dt><dd>{selected.summary}</dd><dt>耗时</dt><dd>{formatDuration(selected.durationMs, selected.status)}</dd></dl>{selected.output && <pre className="tool-output">{selected.output}</pre>}</section>}
+    </>}</div>
 }
 
 function EmptyChat({ onPrompt }: { onPrompt: (value: string) => void }): React.JSX.Element {
@@ -320,13 +368,21 @@ function PromptDialog({ prompt, onRespond }: { prompt: PromptRequest; onRespond:
   </Modal>
 }
 
-function toolsToThoughts(tools: ToolActivity[]): ThoughtChainItemType[] {
+function toolsToThoughts(tools: ToolActivity[], onSelectTool?: (toolId: string) => void, selectedToolId?: string | null): ThoughtChainItemType[] {
   return tools.map((tool) => ({
     key: tool.id,
-    title: tool.name,
-    description: tool.summary,
-    content: tool.output ? <pre className="tool-output">{tool.output}</pre> : undefined,
-    collapsible: Boolean(tool.output),
+    title: <button type="button" className={`tool-title-button${selectedToolId === tool.id ? ' active' : ''}`} onClick={() => onSelectTool?.(tool.id)}>{tool.name}</button>,
+    description: <span>{tool.summary}{tool.durationMs !== undefined && <small> · {formatDuration(tool.durationMs, tool.status)}</small>}</span>,
+    collapsible: false,
     status: tool.status === 'running' ? 'loading' : tool.status === 'done' ? 'success' : tool.status === 'interrupted' ? 'abort' : 'error'
   }))
+}
+
+function formatDuration(durationMs?: number, status?: ToolActivity['status']): string {
+  if (durationMs === undefined) return status === 'running' ? '进行中' : '未记录'
+  return durationMs < 1_000 ? `${Math.round(durationMs)} ms` : `${(durationMs / 1_000).toFixed(1)} s`
+}
+
+function toolStatusLabel(status: ToolActivity['status']): string {
+  return { running: '运行中', done: '已完成', error: '失败', interrupted: '已中断' }[status]
 }

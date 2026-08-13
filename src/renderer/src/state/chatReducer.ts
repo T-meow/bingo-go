@@ -9,7 +9,7 @@ export type ChatMessage = {
   attachments?: MessageImageAttachment[]
   status?: 'streaming' | 'done' | 'interrupted'
 }
-export type ToolActivity = { id: string; turnId: string | null; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string }
+export type ToolActivity = { id: string; turnId: string | null; name: string; summary: string; status: 'running' | 'done' | 'error' | 'interrupted'; output?: string; durationMs?: number }
 export type ChatTimelineItem =
   | { type: 'message'; value: ChatMessage }
   | { type: 'tool'; value: ToolActivity }
@@ -89,8 +89,8 @@ export function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return appendTool(state, { id: event.toolCallId, turnId: event.turnId, name: event.name, summary: event.summary, status: 'running' })
     case 'tool.done':
       return state.tools.some((tool) => tool.id === event.toolCallId)
-        ? updateTool(state, event.toolCallId, (tool) => ({ ...tool, name: event.name, summary: event.summary, status: event.status, output: event.output }))
-        : appendTool(state, { id: event.toolCallId, turnId: event.turnId, name: event.name, summary: event.summary, status: event.status, output: event.output })
+        ? updateTool(state, event.toolCallId, (tool) => ({ ...tool, name: event.name, summary: event.summary, status: event.status, output: event.output, durationMs: event.durationMs }))
+        : appendTool(state, { id: event.toolCallId, turnId: event.turnId, name: event.name, summary: event.summary, status: event.status, output: event.output, durationMs: event.durationMs })
     case 'prompt.request':
       return { ...state, prompts: [...state.prompts, event] }
     case 'prompt.resolved':

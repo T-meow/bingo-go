@@ -13,6 +13,7 @@ import { AppearanceRepository } from '../storage/appearanceRepository'
 import { TranscriptRepository } from '../storage/transcriptRepository'
 import { VisualCapture, visualCaptureEnabled } from '../visual/capture'
 import { WorkspaceRepository } from '../storage/workspaceRepository'
+import { ExternalTerminalError, openExternalTerminal } from '../runtime/externalTerminal'
 
 const OPENCODE_GO_FALLBACK_MODELS = [
   'grok-4.5',
@@ -53,6 +54,7 @@ export function registerIpc(
   }
   const guiError = (error: unknown): GuiError => {
     if (error instanceof BingoCommandError) return { code: error.code, msg: error.message, level: error.level, recoverable: error.recoverable }
+    if (error instanceof ExternalTerminalError) return { code: error.code, msg: error.message, level: 'page', recoverable: true, action: 'retry' }
     const message = error instanceof Error ? error.message : 'The operation failed. Retry.'
     const knownCode = message.startsWith('SETTINGS_CONFLICT:') ? 'SETTINGS_CONFLICT' : message.startsWith('CONFIG_SHADOWED:') ? 'CONFIG_SHADOWED' : message.startsWith('Cannot read ') ? 'CONFIG_INVALID' : message === 'Connection is stale' ? 'CONNECTION_STALE' : null
     return { code: knownCode ?? 'OPERATION_FAILED', msg: message.replace(/^[A-Z_]+:\s*/, ''), level: knownCode === 'CONFIG_INVALID' ? 'flow' : 'page', recoverable: true, action: 'retry' }
@@ -145,6 +147,11 @@ export function registerIpc(
     trusted(event)
     if (!workspace) return { ok: false, error: { code: 'OPERATION_FAILED', msg: 'Workspace storage is unavailable.', level: 'page', recoverable: true } }
     return { ok: true, value: workspace.snapshot() }
+  })
+  ipcMain.handle(IPC.terminalOpenExternal, async (event): Promise<Result<Awaited<ReturnType<typeof openExternalTerminal>>>> => {
+    trusted(event)
+    if (!workspace) return { ok: false, error: { code: 'OPERATION_FAILED', msg: 'Workspace storage is unavailable.', level: 'page', recoverable: true } }
+    try { return { ok: true, value: await openExternalTerminal(workspace.current()) } } catch (error) { return operationalError(error) }
   })
   ipcMain.handle(IPC.workspaceSelect, async (event, raw): Promise<Result<WorkspaceSelectionResult>> => {
     trusted(event)

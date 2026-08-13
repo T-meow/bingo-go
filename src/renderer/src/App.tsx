@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
-import { App as AntApp, Alert, Button, Input, Modal, Result, Space, Typography } from 'antd'
+import { App as AntApp, Alert, Button, Modal, Result, Space, Typography } from 'antd'
 import type { CliEvent, PromptResponse, TeamDefinition, TeamSnapshot } from '../../shared/contracts/cli'
 import type {
   AppInfo, EditableSettings, GuiError, McpServerSettingsInput, ModelListOutput, ProviderSettingsInput, RendererSessionEvent,
@@ -13,6 +13,7 @@ import {
 } from './features/chat/attachments'
 import { ConversationSidebar } from './features/chat/ConversationSidebar'
 import { SettingsPage } from './features/settings/SettingsPage'
+import type { SettingsSectionTransaction } from './features/settings/AppearanceSettings'
 import { SettingsSidebar, type SettingsSection } from './features/settings/SettingsSidebar'
 import { TeamInspector, TeamPage, type TeamActivity } from './features/team/TeamPage'
 import { TeamSidebar, type TeamSelection } from './features/team/TeamSidebar'
@@ -20,6 +21,7 @@ import { chatReducer, initialChatState } from './state/chatReducer'
 import { useAppearance } from './theme/AppearanceProvider'
 
 type Connection = { id: string; sequence: number }
+type PendingSettingsNavigation = { view: AppView } | { section: SettingsSection } | { action: 'workspace' }
 
 export default function App(): React.JSX.Element {
   const { message, modal } = AntApp.useApp()
@@ -33,8 +35,6 @@ export default function App(): React.JSX.Element {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [sessionListError, setSessionListError] = useState<GuiError | null>(null)
   const [activeSession, setActiveSession] = useState<SessionSummary | null>(null)
-  const [renameSession, setRenameSession] = useState<SessionSummary | null>(null)
-  const [renameDraft, setRenameDraft] = useState('')
   const [deleteSession, setDeleteSession] = useState<SessionSummary | null>(null)
   const [sessionMutationError, setSessionMutationError] = useState<GuiError | null>(null)
   const [view, setView] = useState<AppView>('chat')
@@ -48,12 +48,16 @@ export default function App(): React.JSX.Element {
   const [savingRuntime, setSavingRuntime] = useState(false)
   const [sessionOperation, setSessionOperation] = useState(false)
   const [workspaceOperation, setWorkspaceOperation] = useState(false)
+  const [externalTerminalOperation, setExternalTerminalOperation] = useState(false)
   const [attachmentOperation, setAttachmentOperation] = useState(false)
   const [workspacePreferences, setWorkspacePreferences] = useState<WorkspacePreferencesV2 | null>(null)
   const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSnapshot | null>(null)
   const [settingsDraft, setSettingsDraft] = useState<EditableSettings | null>(null)
   const [settingsError, setSettingsError] = useState<GuiError | null>(null)
   const [settingsOperation, setSettingsOperation] = useState(false)
+  const [pendingSettingsNavigation, setPendingSettingsNavigation] = useState<PendingSettingsNavigation | null>(null)
+  const [settingsNavigationSaving, setSettingsNavigationSaving] = useState(false)
+  const [settingsSectionTransaction, setSettingsSectionTransaction] = useState<SettingsSectionTransaction | null>(null)
   const [teamSnapshot, setTeamSnapshot] = useState<TeamSnapshot | null>(null)
   const [teamSelection, setTeamSelection] = useState<TeamSelection | null>(null)
   const [teamActivity, setTeamActivity] = useState<TeamActivity>([])
@@ -61,11 +65,14 @@ export default function App(): React.JSX.Element {
   const [teamOperation, setTeamOperation] = useState(false)
   const [flowError, setFlowError] = useState<GuiError | null>(null)
   const [connected, setConnected] = useState(false)
+  const [selectedToolId, setSelectedToolId] = useState<string | null>(null)
   const connection = useRef<Connection | null>(null)
   const activeTurnId = useRef<string | null>(null)
   const connectInFlight = useRef(false)
   const attachmentDraft = useRef<ComposerImageAttachment[]>([])
   const messagePreviewUrls = useRef(new Set<string>())
+  const settingsDraftDirty = Boolean(settingsSnapshot && settingsDraft && JSON.stringify(settingsDraft) !== JSON.stringify(settingsSnapshot.values))
+  const settingsDirty = settingsDraftDirty || Boolean(settingsSectionTransaction)
 
   useEffect(() => { activeTurnId.current = state.turnId }, [state.turnId])
 
@@ -158,6 +165,7 @@ export default function App(): React.JSX.Element {
       messageCount: opened.history.length
     })
     dispatch({ type: 'restore', history: opened.history })
+    setSelectedToolId(opened.history.flatMap((item) => item.type === 'tool' ? [item.value.id] : []).at(-1) ?? null)
     setTeamSnapshot(null)
     setTeamSelection(null)
     setTeamActivity([])
@@ -170,6 +178,7 @@ export default function App(): React.JSX.Element {
     setActiveSession(null)
     setConnected(false)
     setDraft('')
+    setSelectedToolId(null)
     clearAttachments()
     clearMessagePreviews()
     dispatch({ type: 'restore', history: [] })
@@ -243,6 +252,7 @@ export default function App(): React.JSX.Element {
         } : currentSnapshot)
         return
       }
+      if (payload.type === 'tool.ready') setSelectedToolId(payload.toolCallId)
       dispatch({ type: 'event', event: payload })
     })
     void connect()
@@ -275,15 +285,19 @@ export default function App(): React.JSX.Element {
     setSessionOperation(false)
   }
 
-  const submitRename = async (): Promise<void> => {
-    if (!renameSession || !renameDraft.trim()) return
+  const renameConversation = async (session: SessionSummary, name: string): Promise<boolean> => {
+    if (!name.trim()) return false
     setSessionMutationError(null)
-    const result = await window.bingoGui.renameSession({ sessionId: renameSession.id, name: renameDraft.trim() })
-    if (!result.ok) { setSessionMutationError(result.error); return }
+    const result = await window.bingoGui.renameSession({ sessionId: session.id, name: name.trim() })
+    if (!result.ok) {
+      setSessionMutationError(result.error)
+      void message.error(result.error.msg)
+      return false
+    }
     setSessions((current) => current.map((item) => item.id === result.value.previousId ? result.value.session : item))
     if (activeSession?.id === result.value.previousId) setActiveSession(result.value.session)
-    setRenameSession(null)
     void message.success('对话已重命名')
+    return true
   }
 
   const confirmDelete = async (): Promise<void> => {
@@ -523,6 +537,19 @@ export default function App(): React.JSX.Element {
 
   const saveSettings = async (): Promise<boolean> => {
     if (!runtime || !settingsSnapshot || !settingsDraft) return false
+    const dangerousPermission = settingsDraft.permissionMode === 'dontAsk' || settingsDraft.permissionMode === 'bypassPermissions'
+    if (dangerousPermission && settingsDraft.permissionMode !== settingsSnapshot.values.permissionMode) {
+      const confirmed = await new Promise<boolean>((resolve) => modal.confirm({
+        title: '确认高风险权限模式',
+        content: `${settingsDraft.permissionMode} 会减少或绕过部分交互确认。该选择只写入 Bingo 用户设置。`,
+        okText: '确认保存',
+        cancelText: '取消',
+        okButtonProps: { danger: true },
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false)
+      }))
+      if (!confirmed) return false
+    }
     setSettingsOperation(true)
     setSettingsError(null)
     const result = await window.bingoGui.saveSettings({ workspacePath: runtime.workspacePath, baseRevision: settingsSnapshot.revision, values: settingsDraft })
@@ -649,14 +676,70 @@ export default function App(): React.JSX.Element {
     setTeamActivity(result.value.activity)
   }
 
-  const changeView = (next: AppView): void => {
+  const commitView = (next: AppView): void => {
     setView(next)
     if (next === 'settings') void loadSettings()
     if (next === 'team') void loadTeam()
   }
 
+  const changeView = (next: AppView): void => {
+    if (next === view) return
+    if (view === 'settings' && settingsDirty) {
+      setPendingSettingsNavigation({ view: next })
+      return
+    }
+    commitView(next)
+  }
+
+  const changeSettingsSection = (next: SettingsSection): void => {
+    if (next === settingsSection) return
+    if (settingsDirty) {
+      setPendingSettingsNavigation({ section: next })
+      return
+    }
+    setSettingsSection(next)
+  }
+
+  const continueSettingsNavigation = (target: PendingSettingsNavigation): void => {
+    setPendingSettingsNavigation(null)
+    if ('view' in target) commitView(target.view)
+    else if ('section' in target) setSettingsSection(target.section)
+    else void selectWorkspace()
+  }
+
+  const discardAndContinueSettingsNavigation = (): void => {
+    if (!pendingSettingsNavigation || !settingsSnapshot) return
+    const target = pendingSettingsNavigation
+    if (settingsSectionTransaction) settingsSectionTransaction.discard()
+    else setSettingsDraft(settingsSnapshot.values)
+    continueSettingsNavigation(target)
+  }
+
+  const saveAndContinueSettingsNavigation = async (): Promise<void> => {
+    if (!pendingSettingsNavigation || settingsNavigationSaving) return
+    const target = pendingSettingsNavigation
+    setSettingsNavigationSaving(true)
+    try {
+      const saved = settingsSectionTransaction ? await settingsSectionTransaction.save() : await saveSettings()
+      if (saved) {
+        void message.success('设置已保存')
+        continueSettingsNavigation(target)
+      }
+    } finally {
+      setSettingsNavigationSaving(false)
+    }
+  }
+
+  const requestWorkspaceSelection = (): void => {
+    if (view === 'settings' && settingsDirty) {
+      setPendingSettingsNavigation({ action: 'workspace' })
+      return
+    }
+    void selectWorkspace()
+  }
+
   const selectWorkspace = async (path?: string): Promise<void> => {
-    if (state.turnId || sessionOperation || settingsOperation || teamOperation || workspaceOperation || attachmentOperation) return
+    if (state.turnId || sessionOperation || settingsOperation || teamOperation || workspaceOperation || externalTerminalOperation || attachmentOperation) return
     setWorkspaceOperation(true)
     try {
       const result = await withTimeout(window.bingoGui.selectWorkspace(path ? { path } : {}), 120_000)
@@ -698,28 +781,51 @@ export default function App(): React.JSX.Element {
     }
   }
 
+  const openExternalTerminal = async (): Promise<void> => {
+    if (!runtime || externalTerminalOperation || workspaceOperation) return
+    setExternalTerminalOperation(true)
+    try {
+      const result = await withTimeout(window.bingoGui.openExternalTerminal(), 12_000)
+      if (!result.ok) {
+        void message.error(result.error.msg)
+        return
+      }
+      void message.success(`已在 ${result.value.terminalName} 中打开工作区`)
+    } catch {
+      void message.error('打开外部终端超时，请重试')
+    } finally {
+      setExternalTerminalOperation(false)
+    }
+  }
+
   if (flowError) return <Result status="error" title="无法连接 Bingo" subTitle={`${flowError.code} · ${flowError.msg}`} extra={<Space><Button type="primary" onClick={() => void connect()}>重试</Button><Button loading={workspaceOperation} onClick={() => void selectWorkspace()}>选择工作区</Button></Space>} />
 
   const sidebar = view === 'chat'
-    ? <ConversationSidebar sessions={sessions} activeSession={activeSession} runtime={runtime} error={sessionListError} busy={Boolean(state.turnId) || sessionOperation || workspaceOperation || attachmentOperation} onCreate={() => void newConversation()} onOpen={(session) => void openSession(session)} onRename={(session) => { setRenameSession(session); setRenameDraft(session.name); setSessionMutationError(null) }} onDelete={(session) => { setDeleteSession(session); setSessionMutationError(null) }} onDeleteMany={deleteConversations} />
+    ? <ConversationSidebar sessions={sessions} activeSession={activeSession} runtime={runtime} error={sessionListError} busy={Boolean(state.turnId) || sessionOperation || workspaceOperation || attachmentOperation} onCreate={() => void newConversation()} onOpen={(session) => void openSession(session)} onRename={renameConversation} onDelete={(session) => { setDeleteSession(session); setSessionMutationError(null) }} onDeleteMany={deleteConversations} />
     : view === 'settings'
-      ? <SettingsSidebar active={settingsSection} onChange={setSettingsSection} />
+      ? <SettingsSidebar active={settingsSection} dirty={settingsDirty ? settingsSection : null} onChange={changeSettingsSection} />
       : <TeamSidebar snapshot={teamSnapshot} selection={teamSelection} onSelect={(selection) => { setTeamSelection(selection); setTeamActivity([]); if (selection.kind === 'member') void readActivity(selection.id) }} />
   const inspector = view === 'chat'
-    ? <ChatInspector tools={state.tools} />
+    ? <ChatInspector tools={state.tools} selectedToolId={selectedToolId} onSelectTool={setSelectedToolId} />
     : view === 'team'
       ? <TeamInspector snapshot={teamSnapshot} selection={teamSelection} activity={teamActivity} operationBusy={teamOperation} onRefreshChannel={(channel) => void runTeam((connectionId) => window.bingoGui.readTeamChannel({ connectionId, channel }))} onReadActivity={(member) => void readActivity(member)} onStopMember={(member) => void runTeam((connectionId) => window.bingoGui.stopTeamMember({ connectionId, member }), '成员已停止')} onRemoveMember={(member) => void runTeam((connectionId) => window.bingoGui.removeTeamMember({ connectionId, member }), '运行实例已移除')} />
       : undefined
 
   return <>
-    <AppShell view={view} onViewChange={changeView} sidebar={sidebar} inspector={inspector} inspectorCollapsed={appearance.values.inspectorCollapsed} onInspectorCollapsedChange={(collapsed) => { void appearance.save({ ...appearance.values, inspectorCollapsed: collapsed }) }} workspacePath={runtime?.workspacePath} workspaceBusy={workspaceOperation} workspaceDisabled={Boolean(state.turnId) || sessionOperation || settingsOperation || teamOperation || attachmentOperation} onSelectWorkspace={() => void selectWorkspace()}>
-      {view === 'chat' && <ChatPage state={state} activeSession={activeSession} ready={Boolean(runtime && runtimeSettings)} connected={connected} sessionOperation={sessionOperation || workspaceOperation || attachmentOperation} runtimeSettings={runtimeSettings} selectedProvider={selectedProvider} selectedModel={selectedModel} models={models} thinkingLevel={thinkingLevel} settingsError={runtimeSettingsError} savingRuntime={savingRuntime} draft={draft} attachments={attachments} attachmentCapability={capabilities.includes(ATTACHMENTS_CAPABILITY)} workspacePreferences={workspacePreferences} workspaceBusy={workspaceOperation} onDraftChange={setDraft} onAddAttachments={(files) => void addAttachments(files)} onRemoveAttachment={removeAttachment} onWorkspaceChange={(path) => void selectWorkspace(path)} onProviderChange={(provider) => void changeProvider(provider)} onModelChange={setSelectedModel} onThinkingChange={setThinkingLevel} onSaveRuntime={() => void saveRuntime()} onSubmit={(value) => void submit(value)} onCancel={() => void cancel()} onRespond={(response) => void respond(response)} />}
-      {view === 'settings' && <SettingsPage section={settingsSection} snapshot={settingsSnapshot} draft={settingsDraft} error={settingsError} runtime={runtime} appInfo={appInfo} busy={settingsOperation || sessionOperation || workspaceOperation || Boolean(state.turnId)} onChange={setSettingsDraft} onSave={saveSettings} onGoTeam={() => changeView('team')} onUpsertProvider={upsertProvider} onRemoveProvider={removeProvider} onUpsertMcp={upsertMcp} onRemoveMcp={removeMcp} onListModels={listModels} />}
+    <AppShell view={view} onViewChange={changeView} sidebar={sidebar} inspector={inspector} inspectorCollapsed={appearance.values.inspectorCollapsed} onInspectorCollapsedChange={(collapsed) => { void appearance.save({ ...appearance.values, inspectorCollapsed: collapsed }) }} workspacePath={runtime?.workspacePath} workspaceBusy={workspaceOperation} workspaceDisabled={Boolean(state.turnId) || sessionOperation || settingsOperation || teamOperation || externalTerminalOperation || attachmentOperation} onSelectWorkspace={requestWorkspaceSelection} terminalBusy={externalTerminalOperation} terminalDisabled={!runtime || workspaceOperation} onOpenExternalTerminal={() => void openExternalTerminal()}>
+      {view === 'chat' && <ChatPage state={state} activeSession={activeSession} ready={Boolean(runtime && runtimeSettings)} connected={connected} sessionOperation={sessionOperation || workspaceOperation || attachmentOperation} runtimeSettings={runtimeSettings} selectedProvider={selectedProvider} selectedModel={selectedModel} models={models} thinkingLevel={thinkingLevel} settingsError={runtimeSettingsError} savingRuntime={savingRuntime} draft={draft} attachments={attachments} attachmentCapability={capabilities.includes(ATTACHMENTS_CAPABILITY)} workspacePreferences={workspacePreferences} workspaceBusy={workspaceOperation} selectedToolId={selectedToolId} onSelectTool={setSelectedToolId} onDraftChange={setDraft} onAddAttachments={(files) => void addAttachments(files)} onRemoveAttachment={removeAttachment} onWorkspaceChange={(path) => void selectWorkspace(path)} onProviderChange={(provider) => void changeProvider(provider)} onModelChange={setSelectedModel} onThinkingChange={setThinkingLevel} onSaveRuntime={() => void saveRuntime()} onSubmit={(value) => void submit(value)} onCancel={() => void cancel()} onRespond={(response) => void respond(response)} />}
+      {view === 'settings' && <SettingsPage section={settingsSection} snapshot={settingsSnapshot} draft={settingsDraft} error={settingsError} runtime={runtime} appInfo={appInfo} busy={settingsOperation || sessionOperation || workspaceOperation || Boolean(state.turnId)} onChange={setSettingsDraft} onSave={saveSettings} onDiscard={() => { if (settingsSnapshot) setSettingsDraft(settingsSnapshot.values) }} onSectionTransactionChange={setSettingsSectionTransaction} onGoTeam={() => changeView('team')} onUpsertProvider={upsertProvider} onRemoveProvider={removeProvider} onUpsertMcp={upsertMcp} onRemoveMcp={removeMcp} onListModels={listModels} />}
       {view === 'team' && <TeamPage snapshot={teamSnapshot} selection={teamSelection} error={teamError} operationBusy={teamOperation || workspaceOperation} turnBusy={Boolean(state.turnId)} activity={teamActivity} onRefresh={() => void loadTeam()} onValidate={() => void validateTeam()} onSave={saveTeam} onStart={() => void runTeam((connectionId) => window.bingoGui.startTeam({ connectionId }), 'Team 已启动')} onStop={() => void runTeam((connectionId) => window.bingoGui.stopTeam({ connectionId }), 'Team 已停止')} onMessage={messageMember} onPost={postChannel} />}
     </AppShell>
-    <Modal open={Boolean(renameSession)} title="重命名对话" okText="保存" cancelText="取消" okButtonProps={{ disabled: !renameDraft.trim() }} onOk={() => void submitRename()} onCancel={() => setRenameSession(null)}><Input autoFocus value={renameDraft} maxLength={80} onChange={(event) => setRenameDraft(event.target.value)} />{sessionMutationError && <Alert className="dialog-alert" type="error" showIcon message={sessionMutationError.msg} />}</Modal>
     <Modal open={Boolean(deleteSession)} title={`删除“${deleteSession?.name ?? ''}”？`} okText="删除对话" cancelText="取消" confirmLoading={sessionOperation} okButtonProps={{ danger: true }} onOk={() => void confirmDelete()} onCancel={() => setDeleteSession(null)}><Typography.Paragraph>这会永久删除 Bingo transcript，操作无法撤销。</Typography.Paragraph>{sessionMutationError && <Alert type="error" showIcon message={sessionMutationError.msg} />}</Modal>
+    <Modal open={Boolean(pendingSettingsNavigation)} title="保存设置更改？" closable={!settingsOperation && !settingsNavigationSaving} maskClosable={false} keyboard={!settingsOperation && !settingsNavigationSaving} onCancel={() => setPendingSettingsNavigation(null)} footer={<Space><Button disabled={settingsOperation || settingsNavigationSaving} onClick={() => setPendingSettingsNavigation(null)}>继续编辑</Button><Button disabled={settingsOperation || settingsNavigationSaving} onClick={discardAndContinueSettingsNavigation}>放弃更改</Button><Button type="primary" loading={settingsOperation || settingsNavigationSaving} onClick={() => void saveAndContinueSettingsNavigation()}>保存并继续</Button></Space>}>
+      <Typography.Paragraph>“{settingsSectionLabel(settingsSection)}”中的更改尚未保存。请选择如何继续。</Typography.Paragraph>
+    </Modal>
   </>
+}
+
+function settingsSectionLabel(section: SettingsSection): string {
+  return { general: '常规与运行', providers: 'API 供应商', permissions: '权限', team: 'Team 与协作', mcp: 'MCP', appearance: '外观', advanced: '高级', about: '关于' }[section]
 }
 
 function uniqueModels(models: string[], current = ''): string[] {

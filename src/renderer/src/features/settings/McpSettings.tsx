@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, App, Button, Drawer, Empty, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from 'antd'
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
 import type { GuiError, McpServerSettingsInput, McpServerView, SecretPatch, SettingsSnapshot } from '../../../../shared/contracts/ipc'
-import { SettingsSectionLayout } from './AppearanceSettings'
+import { SettingsSectionLayout, type SettingsSectionTransaction } from './AppearanceSettings'
 
 type McpForm = {
   name: string
@@ -17,10 +17,11 @@ type McpForm = {
   clearHeaders: string[]
 }
 
-export function McpSettings({ snapshot, error, busy, onUpsert, onRemove }: {
+export function McpSettings({ snapshot, error, busy, onTransactionChange, onUpsert, onRemove }: {
   snapshot: SettingsSnapshot
   error: GuiError | null
   busy: boolean
+  onTransactionChange?: (transaction: SettingsSectionTransaction | null) => void
   onUpsert: (server: McpServerSettingsInput) => Promise<boolean>
   onRemove: (name: string) => Promise<boolean>
 }): React.JSX.Element {
@@ -28,12 +29,14 @@ export function McpSettings({ snapshot, error, busy, onUpsert, onRemove }: {
   const servers = snapshot.mcpServers ?? []
   const [editing, setEditing] = useState<McpServerView | 'new' | null>(null)
   const [form, setForm] = useState<McpForm>(emptyMcp())
+  const [initialForm, setInitialForm] = useState<McpForm>(emptyMcp())
   const [saving, setSaving] = useState(false)
+  const transactionRef = useRef<SettingsSectionTransaction | null>(null)
   const current = editing === 'new' ? null : editing
 
   useEffect(() => {
     if (!editing) return
-    setForm(editing === 'new' ? emptyMcp() : {
+    const next = editing === 'new' ? emptyMcp() : {
       name: editing.name,
       type: editing.type,
       command: editing.command,
@@ -44,8 +47,16 @@ export function McpSettings({ snapshot, error, busy, onUpsert, onRemove }: {
       headerText: '',
       clearEnv: [],
       clearHeaders: []
-    })
+    }
+    setForm(next)
+    setInitialForm(next)
   }, [editing])
+
+  const formDirty = Boolean(editing && JSON.stringify(form) !== JSON.stringify(initialForm))
+  const closeEditor = (): void => {
+    if (!formDirty) { setEditing(null); return }
+    modal.confirm({ title: '放弃 MCP 更改？', content: '抽屉中的内容尚未保存。', okText: '放弃更改', cancelText: '继续编辑', okButtonProps: { danger: true }, onOk: () => setEditing(null) })
+  }
 
   const columns = useMemo(() => [
     { title: '服务器', dataIndex: 'name', key: 'name', render: (name: string, item: McpServerView) => <Space><strong>{name}</strong>{item.disabled ? <Tag>已禁用</Tag> : <Tag color="success">已启用</Tag>}</Space> },
@@ -56,22 +67,45 @@ export function McpSettings({ snapshot, error, busy, onUpsert, onRemove }: {
     { title: '', key: 'action', width: 54, render: (_: unknown, item: McpServerView) => <Button type="text" icon={<EditOutlined />} aria-label={`编辑 ${item.name}`} onClick={() => setEditing(item)} /> }
   ], [])
 
-  const save = (): void => {
+  const persist = async (): Promise<boolean> => {
+    if (!valid(form)) {
+      void message.error('请补全 MCP 服务器必填项')
+      return false
+    }
+    setSaving(true)
+    const ok = await onUpsert(toInput(form, current))
+    setSaving(false)
+    setForm((value) => ({ ...value, envText: '', headerText: '', clearEnv: [], clearHeaders: [] }))
+    if (ok) {
+      setEditing(null)
+      void message.success('MCP 设置已保存')
+    }
+    return ok
+  }
+
+  const save = (): Promise<boolean> => {
     const target = form.type === 'stdio' ? [form.command, ...lines(form.argsText)].join(' ') : form.url
-    modal.confirm({
+    return new Promise<boolean>((resolve) => modal.confirm({
       title: form.disabled ? '保存 MCP 服务器？' : '启用外部 MCP 服务器？',
       content: <><Typography.Paragraph>Bingo Go 会将以下配置写入 Bingo 用户设置，下一次会话会连接它。</Typography.Paragraph><Typography.Text code>{target}</Typography.Text></>,
       okText: form.disabled ? '保存' : '确认并保存',
       onOk: async () => {
-        setSaving(true)
-        const ok = await onUpsert(toInput(form, current))
-        setSaving(false)
-        setForm((value) => ({ ...value, envText: '', headerText: '', clearEnv: [], clearHeaders: [] }))
-        if (ok) { setEditing(null); void message.success('MCP 设置已保存') }
-        else throw new Error('MCP 设置保存失败')
-      }
-    })
+        const ok = await persist()
+        resolve(ok)
+        if (!ok) throw new Error('MCP 设置保存失败')
+      },
+      onCancel: () => resolve(false)
+    }))
   }
+
+  transactionRef.current = formDirty ? { save, discard: () => setEditing(null) } : null
+  useEffect(() => {
+    onTransactionChange?.(formDirty ? {
+      save: () => transactionRef.current?.save() ?? Promise.resolve(false),
+      discard: () => transactionRef.current?.discard()
+    } : null)
+    return () => onTransactionChange?.(null)
+  }, [formDirty, onTransactionChange])
 
   const remove = (): void => {
     if (!current) return
@@ -81,7 +115,7 @@ export function McpSettings({ snapshot, error, busy, onUpsert, onRemove }: {
   return <SettingsSectionLayout title="MCP" description="配置 Bingo 使用的 stdio 与 Streamable HTTP 工具服务器。" extra={<Button type="primary" icon={<PlusOutlined />} disabled={busy} onClick={() => setEditing('new')}>添加服务器</Button>}>
     {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
     {servers.length === 0 ? <Empty description="尚未配置 MCP 服务器" /> : <Table rowKey="name" size="middle" pagination={false} columns={columns} dataSource={servers} />}
-    <Drawer title={editing === 'new' ? '添加 MCP 服务器' : `编辑 ${current?.name ?? ''}`} size={500} open={Boolean(editing)} onClose={() => setEditing(null)} extra={<Space>{current?.editable && <Button danger icon={<DeleteOutlined />} onClick={remove}>删除</Button>}<Button type="primary" loading={saving} disabled={!valid(form) || Boolean(current && !current.editable)} onClick={save}>保存</Button></Space>}>
+    <Drawer title={editing === 'new' ? '添加 MCP 服务器' : `编辑 ${current?.name ?? ''}`} size={500} open={Boolean(editing)} maskClosable={!saving} closable={!saving} onClose={closeEditor} extra={<Space>{current?.editable && <Button danger icon={<DeleteOutlined />} onClick={remove}>删除</Button>}<Button type="primary" loading={saving} disabled={!valid(form) || Boolean(current && !current.editable)} onClick={() => void save()}>保存</Button></Space>}>
       {current && !current.editable && <Alert type="warning" showIcon message="工作区层的 MCP 配置只能查看。" />}
       <Form layout="vertical" className="drawer-form">
         <Form.Item label="名称" required><Input value={form.name} disabled={editing !== 'new'} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Item>

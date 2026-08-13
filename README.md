@@ -37,18 +37,45 @@ bingo --json-events --probe
 
 - Node.js 24
 - npm（使用仓库中的 `package-lock.json`）
+- Rust toolchain（用于构建本地 bingo）
 - Windows、macOS 或 Linux 桌面环境；当前发行架构为 x64
-- 已配置可用 Provider 的 protocol-v1-compatible bingo v0.4.0
+- 一份支持 GUI protocol v1 的本地 bingo v0.4.0 源码，以及已配置的可用 Provider
+
+### 准备本地 bingo 项目
+
+Bingo Go 仓库不包含 bingo 源码。开发联调和默认的本地打包流程都要求先准备一份 protocol-v1-compatible bingo，并推荐将两个项目放在同一父目录下：
+
+```text
+D:\Projects\
+|-- bingo\
+|   `-- Cargo.toml
+`-- bingo-go\
+    `-- package.json
+```
+
+打包脚本固定从 `../bingo/Cargo.toml` 构建，因此 `bingo` 目录必须与 `bingo-go` 相邻。脚本不会自动克隆或更新 bingo；它会直接使用当前本地工作区，包括尚未提交的源码修改。
+
+在 Windows 上，先构建并检查本地 bingo：
+
+```powershell
+cd D:\Projects\bingo
+cargo build --locked
+.\target\debug\bingo.exe --version
+.\target\debug\bingo.exe --json-events --probe
+```
+
+探针应返回单条 `protocol.ready` NDJSON 记录，并包含运行时兼容性一节列出的 capability。
 
 安装依赖并启动开发模式：
 
 ```powershell
+cd D:\Projects\bingo-go
 npm ci
-$env:BINGO_GUI_BINARY = "C:\absolute\path\to\bingo.exe"
+$env:BINGO_GUI_BINARY = "D:\Projects\bingo\target\debug\bingo.exe"
 npm run dev
 ```
 
-`BINGO_GUI_BINARY` 必须是绝对路径。开发态未设置它时，应用会从 `PATH` 查找 `bingo`；打包态默认使用随包二进制。
+`BINGO_GUI_BINARY` 必须是绝对路径。修改 bingo 后重新运行 `cargo build --locked`，再重启 Bingo Go，即可使用新的 debug 二进制联调。开发态未设置该变量时，应用会从 `PATH` 查找 `bingo`；打包态默认使用随包二进制。
 
 默认工作区是启动应用时的当前目录。可以在界面中选择工作区，也可以用环境变量固定初始工作区：
 
@@ -90,7 +117,7 @@ git push origin vX.Y.Z
 
 ## 本地打包
 
-仓库默认假设 Bingo protocol-v1 兼容源码位于相邻目录，并在当前原生平台构建、验证和复制 release 二进制：
+本地打包沿用“准备本地 bingo 项目”中的相邻目录结构。开始前确认 `../bingo/Cargo.toml` 存在；打包命令会在当前原生平台构建、验证并复制 release 二进制：
 
 ```text
 parent/
@@ -106,7 +133,11 @@ npm run package:mac
 npm run package:linux
 ```
 
-每条命令都会构建 `../bingo` 和 Electron bundles，验证 Bingo 版本与 protocol capability，并在 `release/` 生成当前平台的发行文件。只应在命令名称对应的操作系统运行。若已有二进制位于其他位置，可在 `npm run build` 后设置绝对路径并单独执行准备和 electron-builder：
+每条命令都会重新构建 `../bingo` 和 Electron bundles，验证 Bingo 版本与 protocol capability，并在 `release/` 生成当前平台的发行文件。因此，本地 bingo 中已保存但尚未提交的修改也会进入安装包。只应在命令名称对应的操作系统运行。
+
+`npm run build` 只生成 Electron bundles，不会构建或装入 bingo。需要携带本地 bingo 修改时，应使用对应平台的 `npm run package:*` 命令。
+
+若 bingo 源码不在相邻目录，但已经有一个构建好的兼容二进制，可在 `npm run build` 后设置绝对路径并单独执行准备和 electron-builder：
 
 ```powershell
 $env:BINGO_GUI_BUNDLE_BINARY = "C:\absolute\path\to\bingo.exe"

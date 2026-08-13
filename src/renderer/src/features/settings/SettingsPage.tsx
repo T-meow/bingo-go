@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Alert, App, Button, Descriptions, Empty, Input, InputNumber, List, Segmented, Select, Space, Switch, Tag, Typography } from 'antd'
-import { SaveOutlined, TeamOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Descriptions, Input, InputNumber, List, Segmented, Select, Skeleton, Space, Switch, Tabs, Tag, Typography } from 'antd'
+import { ReloadOutlined, SaveOutlined, TeamOutlined } from '@ant-design/icons'
 import type {
   AppInfo, EditableSettings, GuiError, McpServerSettingsInput, ModelListOutput, PermissionMode, ProviderSettingsInput,
   RuntimeInfo, SettingsSnapshot
 } from '../../../../shared/contracts/ipc'
-import { AppearanceSettings, SettingsSectionLayout } from './AppearanceSettings'
+import { AppearanceSettings, SettingsSectionLayout, type SettingsSectionTransaction } from './AppearanceSettings'
 import { McpSettings } from './McpSettings'
 import { ProviderSettings } from './ProviderSettings'
 import type { SettingsSection } from './SettingsSidebar'
 import { ModelPicker } from '../../components/ModelPicker'
 
-export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo, busy, onChange, onSave, onGoTeam, onUpsertProvider, onRemoveProvider, onUpsertMcp, onRemoveMcp, onListModels }: {
+export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo, busy, onChange, onSave, onDiscard, onSectionTransactionChange, onGoTeam, onUpsertProvider, onRemoveProvider, onUpsertMcp, onRemoveMcp, onListModels }: {
   section: SettingsSection
   snapshot: SettingsSnapshot | null
   draft: EditableSettings | null
@@ -21,6 +21,8 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
   busy: boolean
   onChange: (value: EditableSettings) => void
   onSave: () => Promise<boolean>
+  onDiscard: () => void
+  onSectionTransactionChange: (transaction: SettingsSectionTransaction | null) => void
   onGoTeam: () => void
   onUpsertProvider: (provider: ProviderSettingsInput) => Promise<boolean>
   onRemoveProvider: (name: string, fallback?: { provider: string; model: string }) => Promise<boolean>
@@ -28,7 +30,7 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
   onRemoveMcp: (name: string) => Promise<boolean>
   onListModels: (provider: string) => Promise<ModelListOutput | null>
 }): React.JSX.Element {
-  const { modal, message } = App.useApp()
+  const { message } = App.useApp()
   const [defaultModels, setDefaultModels] = useState<string[]>([])
   const [modelsLoading, setModelsLoading] = useState(false)
   useEffect(() => {
@@ -41,27 +43,22 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
     }).finally(() => { if (live) setModelsLoading(false) })
     return () => { live = false }
   }, [draft?.provider, section, snapshot?.revision])
-  if (error && !snapshot) return <main className="settings-page"><SettingsSectionLayout title="设置不可用" description="无法读取 Bingo 配置。"><Alert type="error" showIcon message={error.code} description={error.msg} /></SettingsSectionLayout></main>
-  if (!snapshot || !draft) return <main className="settings-page"><Empty description="正在加载设置" /></main>
+  if (error && !snapshot) return <main className="settings-page"><div className="settings-page-scroll"><SettingsSectionLayout title="设置不可用" description="无法读取 Bingo 配置。"><Alert type="error" showIcon message={error.code} description={error.msg} /></SettingsSectionLayout></div></main>
+  if (!snapshot || !draft) return <main className="settings-page"><div className="settings-loading"><Skeleton active paragraph={{ rows: 8 }} /></div></main>
   const dirty = JSON.stringify(draft) !== JSON.stringify(snapshot.values)
   const update = <K extends keyof EditableSettings>(key: K, value: EditableSettings[K]): void => onChange({ ...draft, [key]: value })
   const shadowed = (key: keyof EditableSettings): boolean => snapshot.shadowed.includes(key)
   const source = (key: keyof EditableSettings): string | undefined => snapshot.sources[key]
   const save = async (): Promise<void> => {
-    const dangerous = draft.permissionMode === 'dontAsk' || draft.permissionMode === 'bypassPermissions'
-    if (dangerous && draft.permissionMode !== snapshot.values.permissionMode) {
-      modal.confirm({ title: '确认高风险权限模式', content: `${draft.permissionMode} 会减少或绕过部分交互确认。该选择只写入 Bingo 用户设置。`, okText: '确认保存', okButtonProps: { danger: true }, onOk: async () => { if (await onSave()) void message.success('设置已保存') } })
-      return
-    }
     if (await onSave()) void message.success('设置已保存')
   }
-  const saveButton = <Button type="primary" icon={<SaveOutlined />} disabled={!dirty || busy} onClick={() => void save()}>保存更改</Button>
+  const editableSection = section === 'general' || section === 'permissions' || section === 'team' || section === 'advanced'
 
   let content: React.ReactNode
-  if (section === 'providers') content = <ProviderSettings snapshot={snapshot} error={error} busy={busy} activeProvider={(snapshot.effective ?? snapshot.values).provider} onUpsert={onUpsertProvider} onRemove={onRemoveProvider} onListModels={onListModels} />
-  else if (section === 'mcp') content = <McpSettings snapshot={snapshot} error={error} busy={busy} onUpsert={onUpsertMcp} onRemove={onRemoveMcp} />
-  else if (section === 'appearance') content = <AppearanceSettings />
-  else if (section === 'general') content = <SettingsSectionLayout title="常规与运行" description="设置 Bingo 会话的默认运行参数。" extra={saveButton}>
+  if (section === 'providers') content = <ProviderSettings snapshot={snapshot} error={error} busy={busy} activeProvider={(snapshot.effective ?? snapshot.values).provider} onTransactionChange={onSectionTransactionChange} onUpsert={onUpsertProvider} onRemove={onRemoveProvider} onListModels={onListModels} />
+  else if (section === 'mcp') content = <McpSettings snapshot={snapshot} error={error} busy={busy} onTransactionChange={onSectionTransactionChange} onUpsert={onUpsertMcp} onRemove={onRemoveMcp} />
+  else if (section === 'appearance') content = <AppearanceSettings onTransactionChange={onSectionTransactionChange} />
+  else if (section === 'general') content = <SettingsSectionLayout title="常规与运行" description="设置 Bingo 会话的默认运行参数。">
     {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
     <div className="runtime-summary"><Descriptions size="small" column={2} items={[
       { key: 'workspace', label: '工作区', children: runtime?.workspacePath ?? '未知' },
@@ -76,17 +73,17 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
       <SettingRow title="Prompt Cache" description="向兼容端点发送 cache_control。" source={source('cacheControl')} shadowed={shadowed('cacheControl')}><Switch checked={draft.cacheControl} disabled={shadowed('cacheControl')} onChange={(value) => update('cacheControl', value)} /></SettingRow>
     </div>
   </SettingsSectionLayout>
-  else if (section === 'permissions') content = <SettingsSectionLayout title="权限" description="控制工具默认行为和按规则覆盖。" extra={saveButton}>
+  else if (section === 'permissions') content = <SettingsSectionLayout title="权限" description="控制工具默认行为和按规则覆盖。">
     {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
     <div className="settings-form-section"><SettingRow title="权限模式" description="高风险模式保存前会再次确认。" source={source('permissionMode')} shadowed={shadowed('permissionMode')}><Select value={draft.permissionMode} disabled={shadowed('permissionMode')} options={permissionOptions} onChange={(value) => update('permissionMode', value as PermissionMode)} /></SettingRow></div>
-    <div className="rule-grid">
-      <RuleEditor title="Deny" tone="danger" value={draft.permissions.deny} onChange={(deny) => update('permissions', { ...draft.permissions, deny })} />
-      <RuleEditor title="Ask" tone="warning" value={draft.permissions.ask} onChange={(ask) => update('permissions', { ...draft.permissions, ask })} />
-      <RuleEditor title="Allow" tone="success" value={draft.permissions.allow} onChange={(allow) => update('permissions', { ...draft.permissions, allow })} />
-    </div>
+    <Tabs className="permission-tabs" items={[
+      { key: 'deny', label: `Deny (${draft.permissions.deny.length})`, children: <RuleEditor title="Deny" tone="danger" value={draft.permissions.deny} onChange={(deny) => update('permissions', { ...draft.permissions, deny })} /> },
+      { key: 'ask', label: `Ask (${draft.permissions.ask.length})`, children: <RuleEditor title="Ask" tone="warning" value={draft.permissions.ask} onChange={(ask) => update('permissions', { ...draft.permissions, ask })} /> },
+      { key: 'allow', label: `Allow (${draft.permissions.allow.length})`, children: <RuleEditor title="Allow" tone="success" value={draft.permissions.allow} onChange={(allow) => update('permissions', { ...draft.permissions, allow })} /> }
+    ]} />
     {snapshot.effective && JSON.stringify(snapshot.effective.permissions) !== JSON.stringify(draft.permissions) && <Alert type="info" showIcon message="工作区还附加了权限规则" description="本页面只编辑用户层；项目与 local 层规则仍会按 Bingo 的 deny > ask > allow 语义参与计算。" />}
   </SettingsSectionLayout>
-  else if (section === 'team') content = <SettingsSectionLayout title="Team 与协作" description="设置项目 Team 的启动和频道预算。" extra={<Space>{saveButton}<Button icon={<TeamOutlined />} onClick={onGoTeam}>打开 Team 工作台</Button></Space>}>
+  else if (section === 'team') content = <SettingsSectionLayout title="Team 与协作" description="设置项目 Team 的启动和频道预算。" extra={<Button icon={<TeamOutlined />} onClick={onGoTeam}>打开 Team 工作台</Button>}>
     {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
     <div className="settings-form-section">
       <SettingRow title="自动启动 Team" description="启动只创建待命成员，不产生模型调用。" source={source('team')} shadowed={shadowed('team')}><Switch checked={draft.team.autoStart} disabled={shadowed('team')} onChange={(autoStart) => update('team', { autoStart })} /></SettingRow>
@@ -95,7 +92,7 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
       <SettingRow title="成员消息上限" description="每个 Agent 在每个频道中的预算。" source={source('experimental')} shadowed={shadowed('experimental')}><InputNumber min={1} max={100000} value={draft.experimental.agentMessageLimit} disabled={shadowed('experimental')} onChange={(value) => update('experimental', { ...draft.experimental, agentMessageLimit: value ?? 50 })} /></SettingRow>
     </div>
   </SettingsSectionLayout>
-  else if (section === 'advanced') content = <SettingsSectionLayout title="高级" description="Bingo 终端、Shell 与公开分享配置。" extra={saveButton}>
+  else if (section === 'advanced') content = <SettingsSectionLayout title="高级" description="Bingo 终端、Shell 与公开分享配置。">
     {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
     <div className="settings-form-section">
       <SettingRow title="Bingo TUI 主题" description="只影响终端界面，不影响 Bingo Go。" source={source('theme')} shadowed={shadowed('theme')}><Segmented value={draft.theme} disabled={shadowed('theme')} options={[{ label: '自动', value: 'auto' }, { label: '暗色', value: 'dark' }, { label: '明亮', value: 'light' }]} onChange={(value) => update('theme', value as EditableSettings['theme'])} /></SettingRow>
@@ -110,15 +107,15 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
     <Descriptions bordered size="small" column={1} items={[
       { key: 'bingo-go', label: 'Bingo Go', children: appInfo ? `${appInfo.appVersion} · ${appInfo.platform}-${appInfo.arch}` : '读取中' },
       { key: 'bingo', label: 'Bingo', children: runtime ? `${runtime.bingoVersion} · Protocol ${runtime.protocolVersion}` : '未连接' },
-      { key: 'binary', label: '二进制', children: runtime?.binaryPath ?? '未知' },
-      { key: 'settings', label: '用户配置', children: snapshot.path },
+      { key: 'binary', label: '二进制', children: <Typography.Text copyable={Boolean(runtime?.binaryPath)}>{runtime?.binaryPath ?? '未知'}</Typography.Text> },
+      { key: 'settings', label: '用户配置', children: <Typography.Text copyable>{snapshot.path}</Typography.Text> },
       { key: 'capabilities', label: '运行能力', children: runtime?.capabilities?.length ? runtime.capabilities.join(', ') : '基础 Chat' }
     ]} />
     <div className="readonly-block"><h2>配置层</h2><List dataSource={Object.entries(snapshot.layers)} renderItem={([name, layer]) => <List.Item><List.Item.Meta title={<Space><strong>{layerName(name)}</strong>{layer.exists ? <Tag color="success">存在</Tag> : <Tag>未创建</Tag>}</Space>} description={layer.path} /><span>{layer.keys.length} keys</span></List.Item>} /></div>
     <div className="readonly-block"><h2>许可证</h2><Typography.Paragraph>Bingo Go、Bingo、Ant Design 与 Ant Design X 使用 MIT 许可；头像素材为 CC0。完整第三方声明随 Windows 测试目录提供。</Typography.Paragraph></div>
   </SettingsSectionLayout>
 
-  return <main className="settings-page">{content}</main>
+  return <main className={`settings-page${editableSection ? ' has-save-bar' : ''}`}><div className="settings-page-scroll">{content}</div>{editableSection && <div className="settings-save-bar"><div><strong>{dirty ? '有未保存的更改' : '设置已同步'}</strong><span>{dirty ? '保存后会应用到新的和当前可重连会话。' : '当前分区没有待保存内容。'}</span></div><Space><Button icon={<ReloadOutlined />} disabled={!dirty || busy} onClick={onDiscard}>放弃更改</Button><Button type="primary" icon={<SaveOutlined />} loading={busy} disabled={!dirty || busy} onClick={() => void save()}>保存更改</Button></Space></div>}</main>
 }
 
 function SettingRow({ title, description, source, shadowed, children }: { title: string; description: string; source?: string; shadowed?: boolean; children: React.ReactNode }): React.JSX.Element {

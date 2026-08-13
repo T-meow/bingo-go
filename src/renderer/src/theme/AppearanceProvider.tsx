@@ -73,6 +73,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }):
     root.dataset.density = appliedValues.density
     root.dataset.motion = reducedMotion ? 'reduced' : 'full'
     root.style.setProperty('--rei-accent', appliedValues.accentColor)
+    root.style.setProperty('--rei-on-accent', readableForeground(appliedValues.accentColor))
   }, [appliedValues.accentColor, appliedValues.density, dark, reducedMotion])
 
   const save = useCallback(async (next: AppearancePreferencesV1): Promise<boolean> => {
@@ -108,16 +109,22 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }):
         colorTextLightSolid: readableForeground(appliedValues.accentColor),
         colorBgLayout: dark ? '#171719' : '#F6F7F6',
         colorBgContainer: dark ? '#202024' : '#FFFFFF',
+        colorBgElevated: dark ? '#252529' : '#FFFFFF',
+        colorFillAlter: dark ? '#29292D' : '#F3F4F3',
+        colorTextSecondary: dark ? '#ADAFB3' : '#666B67',
         colorBorderSecondary: dark ? '#343438' : '#E4E5E4',
         borderRadius: 6,
+        borderRadiusLG: 8,
         fontSize: 14,
-        controlHeight: appliedValues.density === 'compact' ? 30 : 34,
+        controlHeight: appliedValues.density === 'compact' ? 30 : 36,
         motion: !reducedMotion
       },
       components: {
         Button: { borderRadius: 6 },
         Drawer: { borderRadiusLG: 6 },
-        Modal: { borderRadiusLG: 6 }
+        Modal: { borderRadiusLG: 8 },
+        Menu: { itemBorderRadius: 6, itemMarginInline: 0 },
+        Table: { headerBg: dark ? '#29292D' : '#F3F4F3' }
       }
     }
   }, [appliedValues, dark, reducedMotion])

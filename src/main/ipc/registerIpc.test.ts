@@ -4,11 +4,13 @@ import type { RuntimeLocator } from '../runtime/runtimeLocator'
 import type { SessionManager } from '../runtime/sessionManager'
 import type { TranscriptRepository } from '../storage/transcriptRepository'
 import type { SettingsRepository } from '../storage/settingsRepository'
+import type { WorkspaceRepository } from '../storage/workspaceRepository'
 import { IPC, type ModelListOutput, type Result, type RuntimeSettings, type SessionListOutput, type SessionOpened } from '../../shared/contracts/ipc'
 import { BingoCommandError } from '../runtime/bingoSession'
 
 const electron = vi.hoisted(() => ({
-  handlers: new Map<string, (event: IpcMainInvokeEvent, input?: unknown) => unknown>()
+  handlers: new Map<string, (event: IpcMainInvokeEvent, input?: unknown) => unknown>(),
+  openExternalTerminal: vi.fn()
 }))
 
 vi.mock('electron', () => ({
@@ -16,9 +18,41 @@ vi.mock('electron', () => ({
   ipcMain: { handle: (channel: string, handler: (event: IpcMainInvokeEvent, input?: unknown) => unknown) => electron.handlers.set(channel, handler) }
 }))
 
+vi.mock('../runtime/externalTerminal', () => ({
+  ExternalTerminalError: class ExternalTerminalError extends Error {},
+  openExternalTerminal: electron.openExternalTerminal
+}))
+
 import { registerIpc } from './registerIpc'
 
 describe('registerIpc session:list', () => {
+  it('opens an external terminal using only the main-owned workspace', async () => {
+    electron.openExternalTerminal.mockResolvedValue({ terminalName: 'Windows Terminal', workspacePath: 'D:\\Projects\\trusted' })
+    const workspace = { current: vi.fn().mockReturnValue('D:\\Projects\\trusted') }
+    const mainFrame = {}
+    const webContents = { mainFrame }
+    registerIpc(
+      { webContents } as unknown as BrowserWindow,
+      {} as RuntimeLocator,
+      {} as SessionManager,
+      {} as TranscriptRepository,
+      {} as SettingsRepository,
+      '/bingo',
+      undefined,
+      workspace as unknown as WorkspaceRepository
+    )
+
+    const handler = electron.handlers.get(IPC.terminalOpenExternal)
+    const result = await handler?.(
+      { sender: webContents, senderFrame: mainFrame } as unknown as IpcMainInvokeEvent,
+      { path: 'D:\\Projects\\untrusted' }
+    )
+
+    expect(workspace.current).toHaveBeenCalledOnce()
+    expect(electron.openExternalTerminal).toHaveBeenCalledWith('D:\\Projects\\trusted')
+    expect(result).toEqual({ ok: true, value: { terminalName: 'Windows Terminal', workspacePath: 'D:\\Projects\\trusted' } })
+  })
+
   it('returns TranscriptRepository.list through the read-only IPC channel', async () => {
     const output: SessionListOutput = {
       sessions: [{ id: 'session-1', name: 'Session 1', preview: 'Latest reply', updatedAt: '2026-08-10T00:00:00.000Z', messageCount: 2 }],

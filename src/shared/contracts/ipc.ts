@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { promptIdSchema, teamDefinitionSchema, type CliEvent, type CliSessionMetadata, type PromptResponse, type TeamDefinition, type TeamSnapshot } from './cli'
 
 export const IPC = {
-  appGetInfo: 'app:get-info', runtimeProbe: 'runtime:probe', workspaceGet: 'workspace:get', workspaceSelect: 'workspace:select', sessionOpen: 'session:open', sessionClose: 'session:close',
+  appGetInfo: 'app:get-info', runtimeProbe: 'runtime:probe', workspaceGet: 'workspace:get', workspaceSelect: 'workspace:select', terminalOpenExternal: 'terminal:open-external', sessionOpen: 'session:open', sessionClose: 'session:close',
   sessionAddAttachment: 'session:add-attachment', sessionSend: 'session:send', sessionCancel: 'session:cancel', sessionRespondPrompt: 'session:respond-prompt',
   sessionRename: 'session:rename', sessionDelete: 'session:delete',
   settingsReadRuntime: 'settings:read-runtime', settingsListModels: 'settings:list-models', settingsSaveRuntime: 'settings:save-runtime',
@@ -24,6 +24,7 @@ export type WorkspacePreferencesV2 = { schemaVersion: 2; currentPath: string; re
 export type WorkspaceSelectionResult =
   | { canceled: true; preferences: WorkspacePreferencesV2 }
   | { canceled: false; changed: boolean; runtime: RuntimeInfo; preferences: WorkspacePreferencesV2 }
+export type ExternalTerminalOpened = { terminalName: string; workspacePath: string }
 export type RendererSessionMetadata = Omit<CliSessionMetadata, 'transcriptPath'>
 export type RendererBingoEvent = Exclude<CliEvent, { type: 'protocol.ready' | 'inspection.ready' | 'session.ready' }>
 export function isRendererBingoEvent(event: CliEvent): event is RendererBingoEvent {
@@ -237,6 +238,7 @@ export type BingoGuiApi = {
   probeRuntime(): Promise<Result<RuntimeInfo>>
   getWorkspaces(): Promise<Result<WorkspacePreferencesV2>>
   selectWorkspace(input?: { path?: string }): Promise<Result<WorkspaceSelectionResult>>
+  openExternalTerminal(): Promise<Result<ExternalTerminalOpened>>
   listSessions(): Promise<Result<SessionListOutput>>
   openSession(input: { sessionId: string | null }): Promise<Result<SessionOpened>>
   renameSession(input: { sessionId: string; name: string }): Promise<Result<{ previousId: string; session: SessionSummary }>>

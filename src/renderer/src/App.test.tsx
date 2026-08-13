@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TeamSnapshot } from '../../shared/contracts/cli'
 import type { BingoGuiApi, EditableSettings, RendererSessionEvent, SessionListOutput, SessionOpened, SettingsSnapshot } from '../../shared/contracts/ipc'
@@ -54,6 +54,7 @@ function api(list: SessionListOutput, capabilities: string[] = ['settings.inspec
     probeRuntime: vi.fn().mockResolvedValue({ ok: true, value: { binaryPath: '/bingo', bingoVersion: '0.4.0', protocolVersion: 1, workspacePath: '/workspace', capabilities } }),
     getWorkspaces: vi.fn().mockResolvedValue({ ok: true, value: { schemaVersion: 2, currentPath: '/workspace', recentPaths: ['/workspace'] } }),
     selectWorkspace: vi.fn().mockResolvedValue({ ok: true, value: { canceled: true, preferences: { schemaVersion: 2, currentPath: '/workspace', recentPaths: ['/workspace'] } } }),
+    openExternalTerminal: vi.fn().mockResolvedValue({ ok: true, value: { terminalName: 'Windows Terminal', workspacePath: '/workspace' } }),
     listSessions: vi.fn().mockResolvedValue({ ok: true, value: list }),
     openSession: vi.fn().mockImplementation(async ({ sessionId }: { sessionId: string | null }) => ({ ok: true, value: opened(sessionId ?? 'new-session', sessionId === firstSession.id ? [
       { type: 'message', value: { id: 'history-user', role: 'user', markdown: 'Remember amber' } },
@@ -102,6 +103,34 @@ describe('Bingo Go workbench', () => {
     expect(screen.getByText('I will remember amber')).toBeTruthy()
   })
 
+  it('opens the current workspace in an external terminal', async () => {
+    const bridge = api({ sessions: [], warnings: [] })
+    window.bingoGui = bridge
+    renderApp()
+
+    fireEvent.click(await screen.findByRole('button', { name: '在外部终端中打开' }))
+
+    await waitFor(() => expect(bridge.openExternalTerminal).toHaveBeenCalledOnce())
+  })
+
+  it('opens the Bingo easter egg from the rail and starts a round', async () => {
+    window.bingoGui = api({ sessions: [], warnings: [] })
+    renderApp()
+
+    fireEvent.click(await screen.findByRole('button', { name: '打开 Bingo 彩蛋游戏' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getAllByRole('gridcell')).toHaveLength(25)
+    expect(within(dialog).getByRole('gridcell', { name: 'FREE，已标记' })).toBeTruthy()
+    expect(within(dialog).getByText('0 / 75')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /抽一个/ }))
+    expect(within(dialog).getByText('1 / 75')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /新一局/ }))
+    expect(within(dialog).getByText('0 / 75')).toBeTruthy()
+  })
+
   it('loads the settings center and renders credential state without secrets', async () => {
     const bridge = api({ sessions: [], warnings: [] })
     window.bingoGui = bridge
@@ -112,6 +141,22 @@ describe('Bingo Go workbench', () => {
     expect(await screen.findByText('opencode-go')).toBeTruthy()
     expect(screen.getByText('未配置')).toBeTruthy()
     expect(document.body.textContent).not.toContain('sk-')
+  })
+
+  it('guards settings navigation while the current section has unsaved changes', async () => {
+    const bridge = api({ sessions: [], warnings: [] })
+    window.bingoGui = bridge
+    renderApp()
+    fireEvent.click(await screen.findByRole('button', { name: '设置' }))
+    await screen.findByRole('heading', { name: '常规与运行' })
+    fireEvent.click(screen.getAllByRole('switch')[0])
+    fireEvent.click(screen.getByText('API 供应商'))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/尚未保存/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '常规与运行' })).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: '放弃更改' }))
+    expect(await screen.findByRole('heading', { name: 'API 供应商' })).toBeTruthy()
   })
 
   it('opens Team when capability is present and degrades when it is absent', async () => {

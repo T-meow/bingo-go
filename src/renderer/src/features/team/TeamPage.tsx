@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Bubble, Sender, ThoughtChain, type BubbleItemType, type ThoughtChainItemType } from '@ant-design/x'
-import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, StopOutlined, TeamOutlined } from '@ant-design/icons'
-import { Alert, App, Button, Drawer, Empty, Form, Input, InputNumber, Select, Space, Tag, Typography } from 'antd'
+import { DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, ReloadOutlined, SaveOutlined, StopOutlined, TeamOutlined } from '@ant-design/icons'
+import { Alert, App, Button, Collapse, Drawer, Dropdown, Empty, Form, Input, InputNumber, Select, Skeleton, Space, Tag, Typography } from 'antd'
 import type { TeamDefinition, TeamSnapshot } from '../../../../shared/contracts/cli'
 import type { GuiError } from '../../../../shared/contracts/ipc'
 import type { TeamSelection } from './TeamSidebar'
@@ -48,19 +48,21 @@ export function TeamPage({ snapshot, selection, error, operationBusy, turnBusy, 
   return <main className="team-page">
     <header className="page-toolbar team-toolbar">
       <div className="page-heading"><span>Team 工作台</span><h1>{currentDefinition?.name ?? '项目协作'}</h1><div className="team-meta"><Tag title={snapshot?.path}>{projectLabel(snapshot?.path)}</Tag><Tag>{snapshot?.branch ?? '未知分支'}</Tag><Tag>{currentDefinition?.channel?.mode ?? 'serial'}</Tag><Tag>{messageCount}/{messageLimit} 消息</Tag><Tag color={runningMembers ? 'processing' : 'default'}>{runningMembers ? `${runningMembers} 个成员运行中` : '未运行'}</Tag><Tag color={snapshot?.validation ? 'error' : snapshot?.available ? 'success' : 'default'}>{snapshot?.validation ? '配置异常' : snapshot?.available ? '蓝图已加载' : '未配置'}</Tag></div></div>
-      <Space wrap>
-        <Button icon={<ReloadOutlined />} onClick={onRefresh} loading={operationBusy}>刷新</Button>
-        <Button onClick={onValidate} disabled={!snapshot?.available}>校验</Button>
-        <Button icon={<EditOutlined />} onClick={openEditor} disabled={!snapshot || futureDefinition}>编辑蓝图</Button>
+      <Space wrap className="team-primary-actions">
         <Button type="primary" icon={<TeamOutlined />} disabled={turnBusy || !snapshot?.available || Boolean(snapshot.validation)} loading={operationBusy} onClick={onStart}>启动</Button>
         <Button danger icon={<StopOutlined />} disabled={turnBusy || !snapshot?.members.some((member) => member.status !== 'offline')} onClick={onStop}>停止</Button>
+        <Dropdown menu={{ items: [
+          { key: 'refresh', icon: <ReloadOutlined />, label: '刷新状态', disabled: operationBusy, onClick: onRefresh },
+          { key: 'validate', label: '校验蓝图', disabled: !snapshot?.available, onClick: onValidate },
+          { key: 'edit', icon: <EditOutlined />, label: '编辑蓝图', disabled: !snapshot || futureDefinition, onClick: openEditor }
+        ] }}><Button icon={<MoreOutlined />} aria-label="更多 Team 操作">更多</Button></Dropdown>
       </Space>
     </header>
     {error && <Alert className="page-alert" type="error" showIcon message={error.code} description={error.msg} />}
     {futureDefinition && <Alert className="page-alert" type="warning" showIcon message="较新的 Team 蓝图" description={`schemaVersion ${snapshot?.definition?.schemaVersion ?? ''} 高于当前支持的 v1，现以只读方式打开。`} />}
     {snapshot?.validation && <Alert className="page-alert" type="warning" showIcon message="Team 校验未通过" description={snapshot.validation} />}
     <section className="team-workspace">
-      {!snapshot && <Empty description="正在读取 Team 状态" />}
+      {!snapshot && <div className="team-loading"><Skeleton active paragraph={{ rows: 7 }} /></div>}
       {snapshot && !selection && <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="从左侧选择频道或成员" />}
       {selectedChannel && <ChannelView channel={selectedChannel} busy={operationBusy} onPost={(text) => onPost(selectedChannel.name, text)} />}
       {selectedMember && <MemberView member={selectedMember} activity={activity} busy={operationBusy} onMessage={(message) => onMessage(selectedMember.name, message)} />}
@@ -117,7 +119,12 @@ function TeamEditor({ open, snapshot, draft, busy, onChange, onClose, onSave }: 
       <Form.Item label="Team 名称" required><Input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} /></Form.Item>
       <div className="team-editor-grid"><Form.Item label="频道模式"><Select value={draft.channel?.mode ?? 'serial'} options={[{ value: 'serial', label: 'Serial' }, { value: 'free', label: 'Free' }]} onChange={(mode) => onChange({ ...draft, channel: { ...draft.channel, mode } })} /></Form.Item><Form.Item label="频道消息上限"><InputNumber min={1} max={100000} value={draft.channel?.messageLimit ?? 500} onChange={(messageLimit) => onChange({ ...draft, channel: { ...draft.channel, messageLimit: messageLimit ?? 500 } })} /></Form.Item></div>
       <div className="team-editor-members"><header><div><strong>成员</strong><span>实例名引用现有 AgentDef，运行引擎可按成员覆盖。</span></div><Button icon={<PlusOutlined />} disabled={!definitions.length} onClick={() => onChange({ ...draft, members: [...draft.members, { name: `member-${draft.members.length + 1}`, agent: definitions[0]?.name ?? '' }] })}>添加</Button></header>
-        {draft.members.map((member, index) => <section className="team-member-editor" key={`${index}-${member.name}`}><div className="team-member-editor-title"><strong>{member.name || `成员 ${index + 1}`}</strong><Button type="text" danger icon={<DeleteOutlined />} aria-label={`删除 ${member.name}`} onClick={() => onChange({ ...draft, members: draft.members.filter((_, memberIndex) => memberIndex !== index) })} /></div><div className="team-editor-grid"><Form.Item label="实例名" required><Input value={member.name} onChange={(event) => updateMember(index, { name: event.target.value })} /></Form.Item><Form.Item label="AgentDef" required><Select value={member.agent} options={definitions.map((definition) => ({ value: definition.name, label: `${definition.name} · ${definition.source}` }))} onChange={(agent) => updateMember(index, { agent })} /></Form.Item><Form.Item label="头像"><Select allowClear value={member.avatar} options={(snapshot?.avatars ?? []).map((avatar) => ({ value: avatar, label: avatar }))} onChange={(avatar) => updateMember(index, { avatar })} /></Form.Item><Form.Item label="Provider"><Input value={member.provider ?? ''} placeholder="继承" onChange={(event) => updateMember(index, { provider: event.target.value || undefined })} /></Form.Item><Form.Item label="Model"><Input value={member.model ?? ''} placeholder="继承" onChange={(event) => updateMember(index, { model: event.target.value || undefined })} /></Form.Item><Form.Item label="Thinking"><Select allowClear value={member.thinking} options={['off', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({ value, label: value }))} onChange={(thinking) => updateMember(index, { thinking })} /></Form.Item></div></section>)}
+        <Collapse className="team-member-collapse" defaultActiveKey={draft.members[0] ? ['0'] : []} items={draft.members.map((member, index) => ({
+          key: String(index),
+          label: <span className="team-member-collapse-label"><strong>{member.name || `成员 ${index + 1}`}</strong><small>{member.agent || '未选择 AgentDef'}</small></span>,
+          extra: <Button type="text" danger icon={<DeleteOutlined />} aria-label={`删除 ${member.name || `成员 ${index + 1}`}`} onClick={(event) => { event.stopPropagation(); onChange({ ...draft, members: draft.members.filter((_, memberIndex) => memberIndex !== index) }) }} />,
+          children: <div className="team-editor-grid"><Form.Item label="实例名" required><Input value={member.name} onChange={(event) => updateMember(index, { name: event.target.value })} /></Form.Item><Form.Item label="AgentDef" required><Select value={member.agent} options={definitions.map((definition) => ({ value: definition.name, label: `${definition.name} · ${definition.source}` }))} onChange={(agent) => updateMember(index, { agent })} /></Form.Item><Form.Item label="头像"><Select allowClear value={member.avatar} options={(snapshot?.avatars ?? []).map((avatar) => ({ value: avatar, label: avatar }))} onChange={(avatar) => updateMember(index, { avatar })} /></Form.Item><Form.Item label="Provider"><Input value={member.provider ?? ''} placeholder="继承" onChange={(event) => updateMember(index, { provider: event.target.value || undefined })} /></Form.Item><Form.Item label="Model"><Input value={member.model ?? ''} placeholder="继承" onChange={(event) => updateMember(index, { model: event.target.value || undefined })} /></Form.Item><Form.Item label="Thinking"><Select allowClear value={member.thinking} options={['off', 'low', 'medium', 'high', 'xhigh', 'max'].map((value) => ({ value, label: value }))} onChange={(thinking) => updateMember(index, { thinking })} /></Form.Item></div>
+        }))} />
       </div>
     </Form>}
   </Drawer>

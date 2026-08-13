@@ -9,6 +9,7 @@ const api: BingoGuiApi = {
   probeRuntime: () => ipcRenderer.invoke(IPC.runtimeProbe),
   getWorkspaces: () => ipcRenderer.invoke(IPC.workspaceGet),
   selectWorkspace: (input = {}) => ipcRenderer.invoke(IPC.workspaceSelect, workspaceSelectInputSchema.parse(input)),
+  openExternalTerminal: () => ipcRenderer.invoke(IPC.terminalOpenExternal),
   listSessions: () => ipcRenderer.invoke(IPC.sessionList),
   openSession: (input) => ipcRenderer.invoke(IPC.sessionOpen, sessionOpenInputSchema.parse(input)),
   renameSession: (input) => ipcRenderer.invoke(IPC.sessionRename, sessionRenameInputSchema.parse(input)),

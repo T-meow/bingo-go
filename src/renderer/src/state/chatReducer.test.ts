@@ -16,6 +16,7 @@ describe('chatReducer', () => {
     state = chatReducer(state, { type: 'event', event: { ...base, seq: 6, type: 'tool.done', toolCallId: 'b', name: 'Bash', summary: 'two', status: 'done', output: 'ok', durationMs: 1 } })
     expect(state.messages.at(-1)?.markdown).toBe('Hi **there**')
     expect(state.tools.map((tool) => tool.status)).toEqual(['running', 'done'])
+    expect(state.tools[1].durationMs).toBe(1)
   })
 
   it('queues prompts FIFO and clears them on cancellation', () => {

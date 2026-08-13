@@ -22,6 +22,18 @@
 - 用户当前消息及恢复后的 transcript 均显示图片缩略图；助手 Markdown 继续随 `text.delta` 流式重解析，只自动加载 HTTPS 图片，拒绝 HTTP、`file:`、任意 `data:` 和其他协议。
 - 外观草稿在颜色、模式、密度或动效变化时立即作用于整个 Bingo Go 界面；“保存外观”才持久化，离开页面或还原时恢复已保存值。
 
+### 2026-08-12 全页面 UI 优化基线
+
+- 全面优化 Chat、Team、设置中心全部 8 个子页和应用壳层，以现有 `@ant-design/x@2.9.0` 的组件、语义插槽和视觉语言为准；assistant-ui 只作为线程视口、渐进披露、消息动作和模型选择交互的只读参考，不引入其 runtime、Tailwind、Radix 或状态依赖。
+- 保留四区桌面结构并精简为 56px 主导航、264px 上下文侧栏、弹性主内容和 328px 检查器；检查器折叠为 40px，低于 980px 时侧栏与检查器改用 Drawer。
+- Chat 空白态把 `Welcome`、`Prompts` 与 `Sender` 组织为居中任务区；有消息后 Sender 固定在底部。工具活动按所属 turn 放在对应助手消息内，以可控 `ThoughtChain` 展示摘要，右侧检查器显示当前工具详情。
+- 会话侧栏增加本地搜索和内联重命名，保留日期分组、管理模式、全选和批量删除。搜索不改变底层排序或选择集合。
+- Team 左侧统一使用分组 `Conversations` 展示频道与成员；主区继续使用 `Bubble`、`Sender`、`ThoughtChain`，顶部压缩主要状态与启动/停止，次要命令在窄屏收进菜单。
+- 设置中心使用分区草稿与粘性保存状态栏；切换分区或离开设置时，未保存草稿必须选择保存、丢弃或继续编辑。Provider、MCP 和外观继续使用各自现有的事务与存储契约。
+- 常规、Provider、权限、Team、MCP、外观、高级、关于全部采用统一的标题、设置行、来源状态、空/载入/错误反馈和 800x600 响应式规则；权限规则改为 Deny/Ask/Allow Tabs，外观预览使用真实的 Ant Design X `Bubble + Sender`。
+- 默认主题色继续使用雾紫 `#756AA8`，但组件形态、状态色和交互反馈遵循 Ant Design X。不得修改公共 IPC、Bingo NDJSON、持久化 schema 或附件协议。
+- 本轮验证执行 `npm run typecheck`、`npm test`、`npm run build`，并补充 DOM、交互、键盘和响应式结构测试；按用户选择不启动 Browser/Chrome，也不执行截图视觉 QA。
+
 ## 许可与依赖边界
 
 - Ant Design X、Ant Design 和官方模板均为 MIT，允许修改、私有使用和商业分发，要求保留版权及许可文本，目前未发现阻断性许可隐患。[Ant Design X LICENSE](https://github.com/ant-design/x/blob/main/LICENSE)、[Ant Design LICENSE](https://github.com/ant-design/ant-design/blob/master/LICENSE)
@@ -37,7 +49,7 @@
 ## UI 架构与组件复用
 
 - 根节点采用 `XProvider + antd App`，合并 Ant Design X 与 Ant Design 的 `zh_CN` locale，并统一 Modal、Message、Notification 上下文。
-- 桌面壳层固定为：64px 主导航、280px 上下文侧栏、弹性主内容区、320px 可折叠检查器；在 800px 宽度下侧栏和检查器改为 Drawer，禁止内容重叠。
+- 桌面壳层固定为：56px 主导航、264px 上下文侧栏、弹性主内容区、328px 可折叠检查器；低于 980px 时侧栏和检查器改为 Drawer，禁止内容重叠。
 - `Independent` 提供会话侧栏、Welcome、Prompts、Bubble、Sender 的组合基础；`Copilot` 用于 Team 成员、工具调用和配置来源检查器；`Agent TBox` 用于 Agent 状态和 ThoughtChain。
 - 采用中性灰白背景与 6px 圆角，紫色只用于选择、主操作和焦点，不形成单色紫色界面；不使用嵌套卡片或营销式大标题。
 - 拆分当前单体 `App.tsx` 为应用壳层、Chat、Team、Settings 和共享状态模块，继续使用 Context + reducer，不增加全局状态依赖。
