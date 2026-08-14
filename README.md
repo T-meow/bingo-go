@@ -128,10 +128,11 @@ Windows unpacked 测试包使用：
 
 ```powershell
 npm run package:win:unpacked
-npm run smoke:package:games
 ```
 
-本地只保留当前构建，所有产物统一写入 `release/`；Windows unpacked 的固定位置是 `release/win-unpacked`。打包前的 reset 脚本只清理 electron-builder 已知产物，发现未知文件会立即停止，不创建隐藏归档，也不保留根目录 `release-*` 副本。
+本地只保留当前构建，所有产物统一写入 `release/`；Windows unpacked 的固定位置是 `release/win-unpacked`，每次测试打包可直接清理并覆盖，不保留旧包或备份。打包前的 reset 脚本只清理 electron-builder 已知产物，发现未知文件会立即停止，不创建隐藏归档，也不保留根目录 `release-*` 副本。
+
+常规非游戏改动和小版本打包默认不额外执行游戏专项打包或 Smoke。只有明确要求、游戏相关代码发生变化或进行大版本更新时，才追加 `npm run build:games` 与 `npm run smoke:package:games`；基础包校验仍确认三款内置游戏存在且符合体积限制。
 
 `verify:package` 会检查包内 Bingo 版本、wire protocol、必需 capability、SHA-256、ASAR 依赖、locale、内置游戏和体积门槛。详细规则见 [docs/package-size-standard.zh-CN.md](docs/package-size-standard.zh-CN.md)。
 

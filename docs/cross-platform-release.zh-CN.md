@@ -40,10 +40,11 @@ Windows unpacked 测试包：
 
 ```powershell
 npm run package:win:unpacked
-npm run smoke:package:games
 ```
 
-本地发行物只写入 `release/`。每次打包前，allowlist reset 脚本删除已知 electron-builder 产物；若存在未知文件或目录则停止，避免误删用户内容。不会创建 `.package-archive` 或根目录 `release-*`。
+`release/win-unpacked` 是可重建测试产物，每次运行该命令可直接清理并覆盖，不保留旧包或备份。本地发行物只写入 `release/`；allowlist reset 若发现未知文件或目录会立即停止，避免误删用户内容。不会创建 `.package-archive` 或根目录 `release-*`。
+
+常规非游戏改动和小版本打包默认不额外执行游戏专项打包或 `smoke:package:games`。只有用户明确要求、游戏/游戏容器发生改动或进行大版本更新时，才追加 `npm run build:games` 与 `npm run smoke:package:games`。应用包仍保留三款内置游戏，基础 `verify:package` 继续检查其存在性与体积。
 
 ## 自动校验
 
@@ -57,7 +58,7 @@ npm run smoke:package:games
 - unpacked、ASAR、运行时和主程序 SHA-256 与体积数据可输出审计。
 - 对正式打包命令，目标平台发行格式存在。
 
-`smoke:package:games` 使用独立临时 `userData` 启动真实 packaged app，验证游戏启动、单窗口切换、禁用关闭、续局、定向清除、网络限制与存储隔离。
+按上述条件启用时，`smoke:package:games` 使用独立临时 `userData` 启动真实 packaged app，验证游戏启动、单窗口切换、禁用关闭、续局、定向清除、网络限制与存储隔离。
 
 ## GitHub Actions 安全边界
 

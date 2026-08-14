@@ -18,7 +18,7 @@
 
 当前 ASAR 生产依赖白名单由 `scripts/verify-packaged-runtime.mjs` 定义，并包含这些依赖实际需要的传递包。修改依赖时必须同步校验脚本和体积结果。
 
-## 唯一 release 规则
+## release 覆盖规则
 
 仓库本地只保留当前发行物：
 
@@ -26,6 +26,8 @@
 release/
 `-- win-unpacked/        # Windows unpacked 命令的最终目录
 ```
+
+`release/win-unpacked` 是可重建的 Windows 测试产物。执行 `npm run package:win:unpacked` 时允许直接清理并覆盖该目录，不创建备份，也不需要保留旧版本；其中的内容不能作为唯一存档。
 
 正式安装器命令可以在 `release/` 根部生成对应平台文件，但下一次打包前都会被重置。不保留 `.package-archive`、`release-fixed`、`release-team-*` 或其他历史副本。
 
@@ -43,20 +45,23 @@ npm run package:win:unpacked
 
 命令依次执行：
 
-1. 清理 `release/` 中 allowlist 允许的旧产物。
+1. 直接重置并覆盖旧的 `release/win-unpacked` 测试包；allowlist reset 仍会拒绝未知内容。
 2. 构建相邻 `../bingo` 的 Windows x64 release runtime。
 3. 构建 `games/build` 与 Electron bundles。
 4. 校验并复制 runtime 到 `resources/bin/win32-x64/bingo.exe`。
 5. 生成 `release/win-unpacked`。
 6. 从最终包中验证运行时、ASAR、locale、游戏与体积。
 
-完成后运行：
+常规非游戏改动或小版本打包到第 6 步即可，不额外执行游戏专项打包与 Smoke。以下情况才运行游戏专项验证：用户明确要求、内置游戏或游戏容器发生改动，或者进行大版本更新。
 
 ```powershell
+npm run build:games
 npm run smoke:package:games
 ```
 
-游戏 smoke 使用命令创建的系统临时目录作为独立 `userData`。它验证三款游戏启动、网络与窗口限制、单窗口切换、续局、禁用关闭、定向清除和存储隔离，并只清理自己创建的临时目录。
+游戏 Smoke 使用命令创建的系统临时目录作为独立 `userData`。它验证三款游戏启动、网络与窗口限制、单窗口切换、续局、禁用关闭、定向清除和存储隔离，并只清理自己创建的临时目录。
+
+“暂时忽略游戏打包”仅表示不额外执行 `build:games`、外部 `.bingo-pack` 构建和 `smoke:package:games`。应用包仍保留当前三款内置游戏，`verify:package` 仍检查它们是否存在及是否超过体积门槛，避免产出缺少既有功能的测试包。
 
 ## 自动校验内容
 
@@ -77,8 +82,13 @@ npm run smoke:package:games
 ```bash
 npm run typecheck
 npm test
-npm run build
 npm run package:win:unpacked
+```
+
+若明确要求游戏验证、游戏相关代码有变化或进行大版本更新，再追加：
+
+```bash
+npm run build:games
 npm run smoke:package:games
 ```
 
