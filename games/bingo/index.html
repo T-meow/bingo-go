@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bingo</title>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar"><div><h1>Bingo</h1><p id="progress">等待抽号</p></div><button id="new-game" type="button">新一局</button></header>
+      <section class="draw-summary" aria-live="polite"><div id="ball" class="ball"><span>GO</span></div><div><strong id="status">寻找连线</strong><p id="lines">0 条连线</p></div></section>
+      <section id="board" class="board" role="grid" aria-label="Bingo 卡片"></section>
+      <button id="draw" class="draw primary" type="button">抽一个</button>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

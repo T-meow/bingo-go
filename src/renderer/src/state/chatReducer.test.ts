@@ -100,4 +100,74 @@ describe('chatReducer', () => {
     expect(state.tools.map((tool) => tool.id)).toEqual(['tool-1', 'tool-2'])
     expect(state.tools[1]).toMatchObject({ status: 'done', output: 'ok' })
   })
+
+  it('initializes, updates, resets, and rejects stale context usage', () => {
+    let state = chatReducer(initialChatState, {
+      type: 'restore',
+      history: [],
+      contextUsage: { usedTokens: 10, contextWindow: 100 }
+    })
+    expect(state.contextUsage).toEqual({ usedTokens: 10, contextWindow: 100 })
+
+    state = chatReducer(state, { type: 'submit', turnId, prompt: 'inspect' })
+    state = chatReducer(state, {
+      type: 'event',
+      event: { ...base, seq: 1, type: 'context.usage', usedTokens: 70, contextWindow: 100 }
+    })
+    expect(state.contextUsage).toEqual({ usedTokens: 70, contextWindow: 100 })
+
+    state = chatReducer(state, { type: 'context', contextUsage: { usedTokens: 20, contextWindow: 200 } })
+    expect(state.contextUsage).toEqual({ usedTokens: 20, contextWindow: 200 })
+
+    state = chatReducer(state, {
+      type: 'event',
+      event: { ...base, turnId: '123e4567-e89b-42d3-a456-426614174999', seq: 2, type: 'context.usage', usedTokens: 90, contextWindow: 100 }
+    })
+    expect(state.contextUsage).toEqual({ usedTokens: 20, contextWindow: 200 })
+
+    state = chatReducer(state, { type: 'reset' })
+    expect(state.contextUsage).toBeNull()
+  })
+
+  it('offers one continuation after cancellation and invalidates it on a new submit', () => {
+    let state = chatReducer(initialChatState, { type: 'submit', turnId, prompt: 'unfinished' })
+    state = chatReducer(state, {
+      type: 'event',
+      event: { ...base, seq: 1, type: 'turn.started', commandId: turnId, promptRevision: 'a'.repeat(64) }
+    })
+    state = chatReducer(state, {
+      type: 'event',
+      event: { ...base, seq: 2, type: 'turn.cancelled', reason: 'requested' }
+    })
+
+    expect(state.recovery).toEqual({ kind: 'cancelled', turnId })
+    expect(state.messages[0]).toMatchObject({ editable: true, revision: 'a'.repeat(64), turnStatus: 'cancelled' })
+
+    state = chatReducer(state, { type: 'submit', turnId: '123e4567-e89b-42d3-a456-426614174001', prompt: 'manual follow-up' })
+    expect(state.recovery).toBeNull()
+    expect(state.messages[0].editable).toBe(false)
+  })
+
+  it('distinguishes recoverable turn failures from transport crashes', () => {
+    let failed = chatReducer(initialChatState, { type: 'submit', turnId, prompt: 'run' })
+    failed = chatReducer(failed, {
+      type: 'event',
+      event: { ...base, seq: 1, type: 'error', scope: 'turn', code: 'TOOL_FAILED', msg: 'failed', level: 'flow', recoverable: true }
+    })
+    expect(failed.recovery).toEqual({ kind: 'turn-error', turnId })
+    expect(failed.messages[0]).toMatchObject({ editable: true, turnStatus: 'error' })
+
+    let crashed = chatReducer(initialChatState, { type: 'submit', turnId, prompt: 'run' })
+    crashed = chatReducer(crashed, { type: 'transport-error', code: 'CHILD_EXITED', msg: 'runtime exited' })
+    expect(crashed.recovery).toEqual({ kind: 'transport-crash', turnId })
+
+    const restored = chatReducer(initialChatState, {
+      type: 'restore',
+      history: [{
+        type: 'message',
+        value: { id: 's:2', role: 'user', markdown: 'run', turnId, origin: 'prompt', turnStatus: 'started' }
+      }]
+    })
+    expect(restored.recovery).toEqual({ kind: 'transport-crash', turnId })
+  })
 })

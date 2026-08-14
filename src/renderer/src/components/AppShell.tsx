@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Button, Drawer, Tooltip } from 'antd'
 import { CodeOutlined, FolderOpenOutlined, InfoCircleOutlined, LeftOutlined, MenuOutlined, MessageOutlined, RightOutlined, SettingOutlined, TeamOutlined } from '@ant-design/icons'
-import { BingoGame } from './BingoGame'
+import { GameCenter } from './GameCenter'
 
 export type AppView = 'chat' | 'team' | 'settings'
 
-export function AppShell({ view, onViewChange, sidebar, children, inspector, inspectorCollapsed, onInspectorCollapsedChange, workspacePath, workspaceBusy, workspaceDisabled, onSelectWorkspace, terminalBusy, terminalDisabled, onOpenExternalTerminal }: {
+export function AppShell({ view, onViewChange, sidebar, children, inspector, inspectorCollapsed, onInspectorCollapsedChange, workspacePath, workspaceBusy, workspaceDisabled, onSelectWorkspace, terminalBusy, terminalDisabled, onOpenExternalTerminal, onOpenGameSettings }: {
   view: AppView
   onViewChange: (view: AppView) => void
   sidebar: React.ReactNode
@@ -20,11 +20,12 @@ export function AppShell({ view, onViewChange, sidebar, children, inspector, ins
   terminalBusy: boolean
   terminalDisabled: boolean
   onOpenExternalTerminal: () => void
+  onOpenGameSettings: () => void
 }): React.JSX.Element {
   const [compact, setCompact] = useState(() => window.innerWidth < 980)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
-  const [bingoOpen, setBingoOpen] = useState(false)
+  const [gameCenterOpen, setGameCenterOpen] = useState(false)
 
   useEffect(() => {
     const resize = (): void => setCompact(window.innerWidth < 980)
@@ -50,7 +51,7 @@ export function AppShell({ view, onViewChange, sidebar, children, inspector, ins
           <RailButton label="设置" active={view === 'settings'} icon={<SettingOutlined />} onClick={() => changeView('settings')} />
         </div>
         {compact && inspector && <Tooltip title="打开检查器" placement="right"><Button className="rail-button rail-inspector" type="text" icon={<InfoCircleOutlined />} aria-label="打开检查器" onClick={() => setInspectorOpen(true)} /></Tooltip>}
-        <button className="brand-name" type="button" aria-label="打开 Bingo 彩蛋游戏" onClick={() => setBingoOpen(true)}>BINGO GO</button>
+        <button className="brand-name" type="button" aria-label="打开小游戏中心" onClick={() => setGameCenterOpen(true)}>BINGO GO</button>
       </nav>
       {!compact && <aside className="context-sidebar">{sidebar}</aside>}
       <section className="workspace-main">{children}</section>
@@ -68,7 +69,7 @@ export function AppShell({ view, onViewChange, sidebar, children, inspector, ins
       <Drawer title="检查器" placement="right" size={328} open={compact && inspectorOpen} onClose={() => setInspectorOpen(false)} rootClassName="inspector-drawer">
         {inspector}
       </Drawer>
-      <BingoGame open={bingoOpen} onClose={() => setBingoOpen(false)} />
+      <GameCenter open={gameCenterOpen} onClose={() => setGameCenterOpen(false)} onOpenSettings={onOpenGameSettings} />
     </div>
   )
 }

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "game",
+  "id": "io.github.tmeow.bingogo.bingo",
+  "name": "Bingo",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "description": "抽号、标记并完成五格连线",
+  "author": "Bingo Go",
+  "window": {
+    "width": 440,
+    "height": 620,
+    "minWidth": 360,
+    "minHeight": 520,
+    "resizable": true
+  }
+}

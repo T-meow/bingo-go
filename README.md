@@ -1,131 +1,122 @@
 # Bingo Go
 
-Bingo Go 是面向 [bingo](https://github.com/yexrob/bingo) 的独立 Electron 桌面工作台。它把 bingo 的对话、工具执行、会话、Team 和运行设置组织在一个适合日常使用的图形界面中，同时继续由 bingo 负责 agent、模型调用、权限、工具和 transcript。
+Bingo Go 是面向 [Bingo](https://github.com/yexrob/bingo) 的独立 Electron 桌面工作台。界面负责交互、展示和本机应用集成，模型调用、工具、权限、Team 运行和 transcript 仍由 Bingo 负责。
 
-本项目由 [Rei](https://github.com/yexrob/rei) 的源码独立演化而来，采用全新的 Git 历史、品牌和发布节奏。Bingo Go 不是 Rei 或 bingo 的官方发行版。
+本项目由 [Rei](https://github.com/yexrob/rei) 的源码独立演化而来，拥有独立的 Git 历史、品牌和发行节奏；它不是 Rei 或 Bingo 的官方发行版。
 
-## 当前能力
+## 当前功能
 
-- 流式对话与 Markdown 渲染，完整展示工具的 `running`、`done`、`error` 和 `interrupted` 状态。
-- 新建、恢复、重命名和删除会话；历史消息继续从 bingo transcript 读取。
-- 切换 Provider、Model 和 Thinking Level，并安全维护 bingo 用户层设置。
-- 选择和记忆工作区，在不同项目之间切换会话运行目录。
-- 添加 PNG、JPEG 或 GIF 图片，并在会话历史中恢复图片消息。
-- 查看、校验、编辑和运行 Team，检查成员、频道和活动记录。
-- 明暗主题、最低 800 x 600 窗口支持，以及隔离的 sandbox renderer。
+- 流式对话、Markdown、图片输入、上下文用量和工具执行状态。
+- 会话新建、恢复、搜索、重命名、删除、编辑分叉与中断恢复。
+- 项目工作区切换，以及 Provider、Model、Thinking、权限和 MCP 设置。
+- 系统通知、明暗主题和最低 800 x 600 窗口支持。
+- Team v2 固定团队、团队大厅、任务群聊、角色库、成员档案和团队预设。
+- 隔离的小游戏中心，内置 Bingo、数独和贪吃蛇，并支持导入 `.bingo-pack`。
+
+### Team v2
+
+Team 页面围绕固定团队大厅和任务群聊组织：
+
+- 固定成员使用稳定 `memberId`，可配置头像、身份、背景、性格、发言风格、Provider、Model、Thinking、行为约束和工作偏好。
+- Agent 角色提供可复用的专业提示词和默认档案，成员配置覆盖角色默认值。
+- 大厅支持广播和 `@成员` 定向消息；忙碌成员不会被打断或排队唤醒。
+- 任务保存创建时的成员配置快照，支持运行、暂停、待验收、完成和取消状态。
+- 用户消息在右侧、成员汇报在左侧、系统事件居中；成员输出不会自动唤醒其他成员。
+- 支持 `.bingo-team` 预设预览、逐项冲突处理、Provider/Model 映射、导入与导出。
+- 头像导入和成员经验由 Bingo 按项目管理；临时成员可展示、推荐并晋升为固定成员。
+
+行为约束当前为 prompt 级规则，不是操作系统权限沙箱。例如 `noNetwork` 会要求成员不要使用联网工具，但不能替代进程级网络隔离。
 
 ## 运行时兼容性
 
-Bingo Go 当前以 `bingo v0.4.0` 为稳定基线，并要求一个支持 GUI protocol v1 的兼容构建。运行时探针必须提供以下 capability：
+Bingo Go 当前以 `bingo 0.4.0` 和 wire protocol v1 为稳定基线。完整功能要求运行时探针提供以下 capability：
 
 - `settings.inspect.v1`
 - `team.workspace.v1`
+- `team.tasks.v1`
+- `team.blueprint.v2`
+- `team.lobby.v1`
+- `team.presets.v1`
+- `team.member.profile.v1`
 - `attachments.input.v1`
+- `session.workspace.v1`
+- `session.context.v1`
 
-可以用下面的命令检查二进制：
+`session.fork.v1` 用于编辑历史提示词和中断恢复；缺失时相应入口会禁用。Team v2 不改变 wire protocol 版本，`.bingo/team.json` 的蓝图 schema 才是 v2。
 
-```powershell
+检查本地二进制：
+
+```bash
 bingo --version
 bingo --json-events --probe
 ```
 
-普通上游 release 若尚未包含 `--json-events`，不能直接驱动当前 Bingo Go。开发时请通过 `BINGO_GUI_BINARY` 指向本项目配套的 protocol-v1 兼容构建；官方自动构建产物会携带已验证的对应平台 Bingo 二进制。
+探针必须只输出一条 `protocol.ready` NDJSON 记录。普通上游发行版如果还没有 `--json-events`，不能直接驱动 Bingo Go。
 
-## 快速开始
+## 开发
 
 环境要求：
 
-- Node.js 24
-- npm（使用仓库中的 `package-lock.json`）
-- Rust toolchain（用于构建本地 bingo）
-- Windows、macOS 或 Linux 桌面环境；当前发行架构为 x64
-- 一份支持 GUI protocol v1 的本地 bingo v0.4.0 源码，以及已配置的可用 Provider
+- Node.js 24 与 npm
+- Rust stable toolchain
+- Windows、macOS 或 Linux 桌面环境
+- 与本仓库相邻的 Bingo 源码目录，或一个兼容的 Bingo 绝对路径
 
-### 准备本地 bingo 项目
-
-Bingo Go 仓库不包含 bingo 源码。开发联调和默认的本地打包流程都要求先准备一份 protocol-v1-compatible bingo，并推荐将两个项目放在同一父目录下：
-
-```text
-D:\Projects\
-|-- bingo\
-|   `-- Cargo.toml
-`-- bingo-go\
-    `-- package.json
-```
-
-打包脚本固定从 `../bingo/Cargo.toml` 构建，因此 `bingo` 目录必须与 `bingo-go` 相邻。脚本不会自动克隆或更新 bingo；它会直接使用当前本地工作区，包括尚未提交的源码修改。
-
-在 Windows 上，先构建并检查本地 bingo：
-
-```powershell
-cd D:\Projects\bingo
-cargo build --locked
-.\target\debug\bingo.exe --version
-.\target\debug\bingo.exe --json-events --probe
-```
-
-探针应返回单条 `protocol.ready` NDJSON 记录，并包含运行时兼容性一节列出的 capability。
-
-安装依赖并启动开发模式：
-
-```powershell
-cd D:\Projects\bingo-go
-npm ci
-$env:BINGO_GUI_BINARY = "D:\Projects\bingo\target\debug\bingo.exe"
-npm run dev
-```
-
-`BINGO_GUI_BINARY` 必须是绝对路径。修改 bingo 后重新运行 `cargo build --locked`，再重启 Bingo Go，即可使用新的 debug 二进制联调。开发态未设置该变量时，应用会从 `PATH` 查找 `bingo`；打包态默认使用随包二进制。
-
-默认工作区是启动应用时的当前目录。可以在界面中选择工作区，也可以用环境变量固定初始工作区：
-
-```powershell
-$env:BINGO_GUI_CWD = "C:\absolute\path\to\workspace"
-npm run dev
-```
-
-Provider 凭据、模型配置、Team 数据和 transcript 仍由 bingo 管理。Bingo Go 不要求把这些内容复制到本仓库。
-
-## 开发与验证
-
-```bash
-npm run dev        # 启动带热更新的 Electron 应用
-npm run typecheck  # 检查 main、preload 和 renderer TypeScript
-npm test           # 运行 Vitest 测试集
-npm run build      # 在 out/ 生成生产 bundles
-```
-
-提交前至少运行 `typecheck`、测试和生产构建。`node_modules/`、`out/`、`release/` 和可重建的 `resources/bin/` 都不进入 Git。
-
-## 自动构建与发行
-
-GitHub Actions 在每次推送 `main` 后原生构建三平台 x64 产物：
-
-- Windows：NSIS 安装器（`.exe`）
-- macOS Intel：DMG 与 ZIP
-- Linux：AppImage 与 DEB
-
-构建完成后可从 [Actions](https://github.com/T-meow/bingo-go/actions/workflows/ci.yml) 下载产物，保留期为 14 天。推送与 `package.json` 版本一致的 `vX.Y.Z` 标签时，同一流程还会在 [Releases](https://github.com/T-meow/bingo-go/releases) 创建发行版并附带各平台文件和 SHA-256 清单。
-
-```bash
-# 先将 package.json 版本更新为 X.Y.Z 并提交
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
-
-当前包未进行 Windows code signing、Apple Developer ID 签名或 notarization，首次运行时可能出现系统安全提示。CI 不使用长期密钥；GitHub Release 只使用当前 workflow 的最小 `contents: write` 权限。
-
-## 本地打包
-
-本地打包沿用“准备本地 bingo 项目”中的相邻目录结构。开始前确认 `../bingo/Cargo.toml` 存在；打包命令会在当前原生平台构建、验证并复制 release 二进制：
+默认本地打包结构：
 
 ```text
 parent/
 |-- bingo/
+|   `-- Cargo.toml
 `-- bingo-go/
+    `-- package.json
 ```
 
-在对应操作系统执行：
+安装依赖并启动：
+
+```bash
+npm ci
+npm run dev
+```
+
+开发态会从 `PATH` 查找 `bingo`。也可以设置绝对路径的 `BINGO_GUI_BINARY`，并用 `BINGO_GUI_CWD` 指定初始项目目录。
+
+常用验证命令：
+
+```bash
+npm run typecheck
+npm test
+npm run build
+```
+
+`npm run build` 会先构建三款内置游戏，再把 Electron main、preload 和 renderer bundle 输出到可重建的 `out/`。
+
+## 小游戏
+
+小游戏源码统一位于 `games/`：
+
+```text
+games/
+|-- bingo/
+|-- snake/
+|-- sudoku/
+|-- shared/
+|-- examples/minimal/
+|-- build/              # 可重建的内置游戏输出
+`-- dist/               # 默认 .bingo-pack 输出
+```
+
+构建外部包示例：
+
+```bash
+npm run pack:game -- games/examples/minimal
+```
+
+格式、存档兼容性和运行边界见 [games/README.md](games/README.md)。
+
+## 打包与发布
+
+本地打包会从 `../bingo/Cargo.toml` 构建 release 二进制，再构建并验证 Electron 包：
 
 ```bash
 npm run package:win
@@ -133,54 +124,46 @@ npm run package:mac
 npm run package:linux
 ```
 
-每条命令都会重新构建 `../bingo` 和 Electron bundles，验证 Bingo 版本与 protocol capability，并在 `release/` 生成当前平台的发行文件。因此，本地 bingo 中已保存但尚未提交的修改也会进入安装包。只应在命令名称对应的操作系统运行。
-
-`npm run build` 只生成 Electron bundles，不会构建或装入 bingo。需要携带本地 bingo 修改时，应使用对应平台的 `npm run package:*` 命令。
-
-若 bingo 源码不在相邻目录，但已经有一个构建好的兼容二进制，可在 `npm run build` 后设置绝对路径并单独执行准备和 electron-builder：
+Windows unpacked 测试包使用：
 
 ```powershell
-$env:BINGO_GUI_BUNDLE_BINARY = "C:\absolute\path\to\bingo.exe"
-npm run prepare:bingo
+npm run package:win:unpacked
+npm run smoke:package:games
 ```
 
-CI 使用 [`vendor/bingo/v0.4.0-protocol-v1.patch`](vendor/bingo/v0.4.0-protocol-v1.patch) 从固定的官方 Bingo v0.4.0 commit 重建兼容运行时，不依赖移动分支或开发机上的未提交文件。
+本地只保留当前构建，所有产物统一写入 `release/`；Windows unpacked 的固定位置是 `release/win-unpacked`。打包前的 reset 脚本只清理 electron-builder 已知产物，发现未知文件会立即停止，不创建隐藏归档，也不保留根目录 `release-*` 副本。
 
-## 架构边界
+`verify:package` 会检查包内 Bingo 版本、wire protocol、必需 capability、SHA-256、ASAR 依赖、locale、内置游戏和体积门槛。详细规则见 [docs/package-size-standard.zh-CN.md](docs/package-size-standard.zh-CN.md)。
+
+GitHub Actions 在 `main`、手动触发和版本标签上使用固定 Bingo commit 与仓库内补丁原生构建三平台 x64 包。当前产物未签名，也未 notarize，首次启动可能出现系统安全提示。
+
+## 安全边界
 
 ```text
 React renderer (sandboxed)
-          | typed, validated IPC
+          | validated, allowlisted IPC
           v
 Electron main process
           | protocol v1 NDJSON over stdio
           v
-bingo child process
-          |-- model stream and tools
-          |-- prompts and permissions
-          |-- Team workspace
-          `-- bingo-owned transcripts
+Bingo child process
 ```
 
-Electron main 负责可信文件访问和子进程生命周期；preload 只暴露 allowlist API；renderer 不获得 Node.js、Shell 或原始文件系统能力。Bingo Go 只读 transcript，并通过校验、备份和原子替换修改允许维护的用户设置。
+- Renderer 启用 sandbox 和 context isolation，不拥有 Node.js、Shell、原始 IPC 或任意文件系统访问。
+- Preload 只暴露显式的类型化 API；main 再次校验 payload、调用来源、路径和运行状态。
+- Bingo 是 transcript 的唯一写入者。Electron 读取 transcript，并只通过受控事务维护允许编辑的本机配置。
+- API Key 不进入 renderer 持久状态、Team 蓝图、任务记录、游戏包或团队预设。
+- 小游戏使用独立窗口、持久化分区和自定义协议；没有 preload、Node/Electron API、下载、弹窗或网络访问。
+- 本地打包会包含相邻 Bingo 工作树当前已保存的代码，发布前必须检查其来源和 Git 状态。
 
-协议和验收细节见：
+## 文档
 
-- [`docs/architecture.md`](docs/architecture.md)
-- [`docs/prd.md`](docs/prd.md)
-- [`docs/acceptance.md`](docs/acceptance.md)
-- [`docs/cross-platform-release.zh-CN.md`](docs/cross-platform-release.zh-CN.md)
-- [`docs/upstream-sync.zh-CN.md`](docs/upstream-sync.zh-CN.md)
-
-## 上游与维护
-
-- `main` 是 Bingo Go 唯一长期主线，拥有独立的根提交。
-- `origin` 指向公开独立仓库 [`T-meow/bingo-go`](https://github.com/T-meow/bingo-go)，由 `main` 和版本标签触发自动构建。
-- Git remote `upstream` 只记录 Rei 的来源地址，禁止推送，也不在本仓库 fetch 或 merge Rei 历史。
-- 需要参考 Rei 更新时，在仓库外的临时检出中审阅差异，再以补丁或人工移植方式提交到 Bingo Go。
-
-详细流程见 [`docs/upstream-sync.zh-CN.md`](docs/upstream-sync.zh-CN.md)。
+- [当前架构](docs/architecture.md)
+- [跨平台发行](docs/cross-platform-release.zh-CN.md)
+- [上游来源与同步](docs/upstream-sync.zh-CN.md)
+- [打包体积规范](docs/package-size-standard.zh-CN.md)
+- [小游戏包作者指南](games/README.md)
 
 ## 许可
 
-Bingo Go 按 [MIT License](LICENSE) 发布。源自 Rei 的代码以及随包 Bingo 二进制继续遵循各自的 MIT 条款；完整来源和第三方声明见 [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES)。
+Bingo Go 按 [MIT License](LICENSE) 发布。源自 Rei 的代码和随包 Bingo 二进制继续遵循各自的 MIT 条款；来源与第三方声明见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES)。

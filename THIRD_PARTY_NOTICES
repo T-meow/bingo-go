@@ -58,6 +58,18 @@ CC0 1.0. Attribution is not required and is included here for provenance.
 https://www.dicebear.com/styles/lorelei/
 https://creativecommons.org/publicdomain/zero/1.0/
 
+sudoku-gen, Kontra, yauzl and yazl
+-----------------------------------
+sudoku-gen by Pete Williams, Kontra by Steven Lambert, yauzl by Josh Wolfe,
+and yazl by Josh Wolfe are licensed under the MIT License. sudoku-gen and
+Kontra are bundled only into the built-in game resources; yazl is used only by
+the author packaging tool. yauzl and its runtime dependency pend are used by
+the desktop main process to inspect local game archives.
+https://github.com/petewritescode/sudoku-gen
+https://github.com/straker/kontra
+https://github.com/thejoshwolfe/yauzl
+https://github.com/thejoshwolfe/yazl
+
 Additional dependencies
 -----------------------
 Other npm and Cargo dependencies retain their original copyright notices and

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { cliEventSchema, clientCommandSchema, type CliEvent, type CliSessionMetadata, type ClientCommand, type PromptResponse, type TeamDefinition, type TeamSnapshot } from '../../shared/contracts/cli'
+import { cliEventSchema, clientCommandSchema, type AgentDefinitionDocument, type AgentDefinitionInput, type CliEvent, type CliSessionMetadata, type ClientCommand, type ContextUsage, type PromptResponse, type SessionForkReason, type TeamDefinition, type TeamSnapshot, type TeamTask, type TeamTaskSummary } from '../../shared/contracts/cli'
 import type { BingoSession, BingoSessionHandlers } from './bingoSession'
 import { BingoCommandError } from './bingoSession'
 import { binaryCommand } from './binaryCommand'
@@ -29,7 +29,8 @@ export class StdioBingoSession implements BingoSession {
     private readonly binaryPath: string,
     private readonly cwd: string,
     private readonly handlers: BingoSessionHandlers,
-    private readonly env: NodeJS.ProcessEnv = process.env
+    private readonly env: NodeJS.ProcessEnv = process.env,
+    private readonly bindSessionWorkspace = false
   ) {}
 
   open(sessionId?: string): Promise<CliSessionMetadata> {
@@ -38,6 +39,7 @@ export class StdioBingoSession implements BingoSession {
     this.exitReported = false
     const args = ['--json-events']
     if (sessionId) args.push('--session', sessionId)
+    if (sessionId && this.bindSessionWorkspace) args.push('--bind-session-workspace')
 
     this.ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve
@@ -82,6 +84,12 @@ export class StdioBingoSession implements BingoSession {
 
   sendTurn(turnId: string, prompt: string): Promise<void> {
     return this.write({ protocolVersion: 1, type: 'turn.start', commandId: randomUUID(), turnId, prompt })
+  }
+
+  async subscribeContext(): Promise<ContextUsage> {
+    const event = await this.request({ protocolVersion: 1, type: 'context.subscribe', commandId: randomUUID() }, 'context.usage')
+    if (event.type !== 'context.usage') throw new Error('Unexpected context.subscribe response')
+    return { usedTokens: event.usedTokens, contextWindow: event.contextWindow }
   }
 
   async addAttachment(attachmentId: string, data: string): Promise<{ attachmentId: string; marker: string; mediaType: 'image/png' | 'image/jpeg' }> {
@@ -150,6 +158,111 @@ export class StdioBingoSession implements BingoSession {
     return event.snapshot
   }
 
+  async getTeamLobby(beforeSeq?: number, limit?: number): Promise<import('../../shared/contracts/cli').TeamLobby> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.lobby.get', commandId: randomUUID(), beforeSeq, limit }, 'team.lobby.snapshot')
+    if (event.type !== 'team.lobby.snapshot') throw new Error('Unexpected team.lobby.get response')
+    return event.lobby
+  }
+
+  async postTeamLobby(text: string, targets: string[] = []): Promise<import('../../shared/contracts/cli').TeamLobby> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.lobby.post', commandId: randomUUID(), text, targets }, 'team.lobby.snapshot')
+    if (event.type !== 'team.lobby.snapshot') throw new Error('Unexpected team.lobby.post response')
+    return event.lobby
+  }
+
+  async importTeamAvatar(fileName: string, data: string): Promise<{ avatar: string; snapshot: TeamSnapshot }> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.avatar.import', commandId: randomUUID(), fileName, data }, 'team.avatar.imported')
+    if (event.type !== 'team.avatar.imported') throw new Error('Unexpected team.avatar.import response')
+    return { avatar: event.avatar, snapshot: event.snapshot }
+  }
+
+  async getTeamAvatar(avatar: string): Promise<{ avatar: string; dataUrl: string }> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.avatar.get', commandId: randomUUID(), avatar }, 'team.avatar.loaded')
+    if (event.type !== 'team.avatar.loaded') throw new Error('Unexpected team.avatar.get response')
+    return { avatar: event.avatar, dataUrl: event.dataUrl }
+  }
+
+  async inspectTeamPreset(data: string): Promise<import('../../shared/contracts/cli').TeamPresetPreview> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.preset.inspect', commandId: randomUUID(), data }, 'team.preset.preview')
+    if (event.type !== 'team.preset.preview') throw new Error('Unexpected team.preset.inspect response')
+    return event.preview
+  }
+
+  async importTeamPreset(data: string, baseRevision: string, resolutions: Record<string, 'update' | 'keep'>, modelMappings: Record<string, import('../../shared/contracts/cli').TeamPresetModelMapping>): Promise<{ preview: import('../../shared/contracts/cli').TeamPresetPreview; snapshot: TeamSnapshot }> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.preset.import', commandId: randomUUID(), data, baseRevision, resolutions, modelMappings }, 'team.preset.imported')
+    if (event.type !== 'team.preset.imported') throw new Error('Unexpected team.preset.import response')
+    return { preview: event.preview, snapshot: event.snapshot }
+  }
+
+  async exportTeamPreset(): Promise<{ fileName: string; data: string }> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.preset.export', commandId: randomUUID() }, 'team.preset.exported')
+    if (event.type !== 'team.preset.exported') throw new Error('Unexpected team.preset.export response')
+    return { fileName: event.fileName, data: event.data }
+  }
+
+  async restartTeamMember(member: string): Promise<TeamSnapshot> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.member.restart', commandId: randomUUID(), member }, 'team.member.configured')
+    if (event.type !== 'team.member.configured' || event.action !== 'restarted') throw new Error('Unexpected team.member.restart response')
+    return event.snapshot
+  }
+
+  async markTeamMemberUseful(member: string): Promise<TeamSnapshot> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.member.useful', commandId: randomUUID(), member }, 'team.member.configured')
+    if (event.type !== 'team.member.configured' || event.action !== 'useful') throw new Error('Unexpected team.member.useful response')
+    return event.snapshot
+  }
+
+  async promoteTeamMember(member: string, baseRevision: string): Promise<{ memberId?: string; snapshot: TeamSnapshot }> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.member.promote', commandId: randomUUID(), member, baseRevision }, 'team.member.configured')
+    if (event.type !== 'team.member.configured' || event.action !== 'promoted') throw new Error('Unexpected team.member.promote response')
+    return { memberId: event.memberId, snapshot: event.snapshot }
+  }
+
+  async listTeamTasks(): Promise<{ branch: string; tasks: TeamTaskSummary[] }> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.task.list', commandId: randomUUID() }, 'team.tasks.snapshot')
+    if (event.type !== 'team.tasks.snapshot') throw new Error('Unexpected team.task.list response')
+    return { branch: event.branch, tasks: event.tasks }
+  }
+
+  async getTeamTask(taskId: string, beforeSeq?: number, limit?: number): Promise<TeamTask> {
+    const event = await this.request({ protocolVersion: 1, type: 'team.task.get', commandId: randomUUID(), taskId, beforeSeq, limit }, 'team.task.updated')
+    if (event.type !== 'team.task.updated' || !event.detail) throw new Error('Unexpected team.task.get response')
+    return event.detail
+  }
+
+  async createTeamTask(input: { title: string; description: string; participants?: string[]; leader?: string; contextMessageSeqs?: number[]; additionalConstraints?: import('../../shared/contracts/cli').BehaviorConstraint[] }): Promise<TeamTask> {
+    const event = await this.request({
+      protocolVersion: 1,
+      type: 'team.task.create',
+      commandId: randomUUID(),
+      ...input,
+      contextMessageSeqs: input.contextMessageSeqs ?? [],
+      additionalConstraints: input.additionalConstraints ?? []
+    }, 'team.task.updated')
+    if (event.type !== 'team.task.updated' || event.action !== 'created' || !event.detail) throw new Error('Unexpected team.task.create response')
+    return event.detail
+  }
+
+  postTeamTask(taskId: string, text: string): Promise<TeamTaskSummary> {
+    return this.updateTeamTask({ protocolVersion: 1, type: 'team.task.post', commandId: randomUUID(), taskId, text }, 'posted')
+  }
+
+  pauseTeamTask(taskId: string): Promise<TeamTaskSummary> {
+    return this.updateTeamTask({ protocolVersion: 1, type: 'team.task.pause', commandId: randomUUID(), taskId }, 'paused')
+  }
+
+  resumeTeamTask(taskId: string, message?: string): Promise<TeamTaskSummary> {
+    return this.updateTeamTask({ protocolVersion: 1, type: 'team.task.resume', commandId: randomUUID(), taskId, message }, 'resumed')
+  }
+
+  completeTeamTask(taskId: string): Promise<TeamTaskSummary> {
+    return this.updateTeamTask({ protocolVersion: 1, type: 'team.task.complete', commandId: randomUUID(), taskId }, 'completed')
+  }
+
+  cancelTeamTask(taskId: string): Promise<TeamTaskSummary> {
+    return this.updateTeamTask({ protocolVersion: 1, type: 'team.task.cancel', commandId: randomUUID(), taskId }, 'cancelled')
+  }
+
   async messageTeamMember(member: string, message: string): Promise<TeamSnapshot> {
     const event = await this.request({ protocolVersion: 1, type: 'agent.message', commandId: randomUUID(), member, message }, 'agent.updated')
     if (event.type !== 'agent.updated' || event.action !== 'messaged') throw new Error('Unexpected agent.message response')
@@ -172,6 +285,30 @@ export class StdioBingoSession implements BingoSession {
     const event = await this.request({ protocolVersion: 1, type: 'agent.activity.get', commandId: randomUUID(), member }, 'agent.activity')
     if (event.type !== 'agent.activity') throw new Error('Unexpected agent.activity.get response')
     return { member: event.member, activity: event.activity }
+  }
+
+  async listAgentDefinitions(): Promise<AgentDefinitionDocument[]> {
+    const event = await this.request({ protocolVersion: 1, type: 'agent.definition.list', commandId: randomUUID() }, 'agent.definitions.snapshot')
+    if (event.type !== 'agent.definitions.snapshot') throw new Error('Unexpected agent.definition.list response')
+    return event.definitions
+  }
+
+  async getAgentDefinition(scope: 'user' | 'project', id: string): Promise<AgentDefinitionDocument> {
+    const event = await this.request({ protocolVersion: 1, type: 'agent.definition.get', commandId: randomUUID(), scope, id }, 'agent.definition.updated')
+    if (event.type !== 'agent.definition.updated' || event.action !== 'loaded') throw new Error('Unexpected agent.definition.get response')
+    return event.definition
+  }
+
+  async saveAgentDefinition(scope: 'user' | 'project', id: string, baseRevision: string | undefined, definition: AgentDefinitionInput): Promise<AgentDefinitionDocument> {
+    const event = await this.request({ protocolVersion: 1, type: 'agent.definition.save', commandId: randomUUID(), scope, id, baseRevision, definition }, 'agent.definition.updated')
+    if (event.type !== 'agent.definition.updated' || event.action !== 'saved') throw new Error('Unexpected agent.definition.save response')
+    return event.definition
+  }
+
+  async archiveAgentDefinition(scope: 'user' | 'project', id: string, baseRevision: string): Promise<{ definition: AgentDefinitionDocument; archivePath?: string }> {
+    const event = await this.request({ protocolVersion: 1, type: 'agent.definition.archive', commandId: randomUUID(), scope, id, baseRevision }, 'agent.definition.updated')
+    if (event.type !== 'agent.definition.updated' || event.action !== 'archived') throw new Error('Unexpected agent.definition.archive response')
+    return { definition: event.definition, archivePath: event.archivePath }
   }
 
   async postTeamChannel(channel: string, text: string): Promise<TeamSnapshot> {
@@ -198,6 +335,18 @@ export class StdioBingoSession implements BingoSession {
     this.closed = true
     await Promise.race([this.exitPromise ?? Promise.resolve(), new Promise<void>((resolve) => setTimeout(resolve, 500))])
     return event.deletedSessionId
+  }
+
+  async fork(reason: SessionForkReason, sourceTurnId?: string, sourceRevision?: string): Promise<Extract<CliEvent, { type: 'session.forked' }>> {
+    const event = await this.request({
+      protocolVersion: 1,
+      type: 'session.fork',
+      commandId: randomUUID(),
+      reason,
+      ...(sourceTurnId && sourceRevision ? { sourceTurnId, sourceRevision } : {})
+    }, 'session.forked', 30_000)
+    if (event.type !== 'session.forked') throw new Error('Unexpected session.fork response')
+    return event
   }
 
   async close(): Promise<void> {
@@ -316,6 +465,12 @@ export class StdioBingoSession implements BingoSession {
     if (this.forceTimer) clearTimeout(this.forceTimer)
     this.cancelTimer = null
     this.forceTimer = null
+  }
+
+  private async updateTeamTask(command: ClientCommand, expectedAction: string): Promise<TeamTaskSummary> {
+    const event = await this.request(command, 'team.task.updated')
+    if (event.type !== 'team.task.updated' || event.action !== expectedAction) throw new Error(`Unexpected ${command.type} response`)
+    return event.task
   }
 
   private reportExit(error: Error | null, exitCode: number | null, signal: string | null): void {

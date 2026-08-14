@@ -1,6 +1,5 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, Notification } from 'electron'
 import { join } from 'node:path'
-import { execFileSync } from 'node:child_process'
 import { registerIpc, sendSessionEvent } from './ipc/registerIpc'
 import { RuntimeLocator } from './runtime/runtimeLocator'
 import { SessionManager } from './runtime/sessionManager'
@@ -10,8 +9,16 @@ import { SettingsRepository } from './storage/settingsRepository'
 import { AppearanceRepository } from './storage/appearanceRepository'
 import { TranscriptRepository } from './storage/transcriptRepository'
 import { WorkspaceRepository } from './storage/workspaceRepository'
+import { NotificationPreferencesRepository } from './storage/notificationPreferencesRepository'
+import { NotificationCoordinator } from './notifications/notificationCoordinator'
+import { IPC } from '../shared/contracts/ipc'
+import { GamePackRepository } from './game-packs/gamePackRepository'
+import { GameProtocol, registerGameProtocolScheme } from './game-packs/gameProtocol'
+import { GameWindowManager } from './game-packs/gameWindowManager'
+import { UserProfileRepository } from './storage/userProfileRepository'
 
 let sessions: SessionManager | null = null
+let gameWindows: GameWindowManager | null = null
 
 async function createWindow(): Promise<void> {
   Menu.setApplicationMenu(null)
@@ -29,79 +36,63 @@ async function createWindow(): Promise<void> {
   const bundledBinary = app.isPackaged ? bundledBingoPath(process.resourcesPath) : undefined
   const binaryPath = process.env.BINGO_GUI_BINARY ?? bundledBinary ?? 'bingo'
   const locator = new RuntimeLocator({ bundledBinary })
+  const notificationPreferences = new NotificationPreferencesRepository(join(app.getPath('userData'), 'notifications.json'))
+  const notifications = new NotificationCoordinator({
+    window,
+    isSupported: () => Notification.isSupported(),
+    createNotification: (options) => new Notification(options),
+    activate: (activation) => {
+      if (!window.isDestroyed()) window.webContents.send(IPC.notificationActivated, activation)
+    }
+  })
+  try {
+    const snapshot = await notificationPreferences.read()
+    notifications.updatePreferences(snapshot.values)
+  } catch {
+    // Invalid preferences keep notifications disabled until the user resolves the file.
+    notifications.disable()
+  }
   sessions = new SessionManager(
-    (handlers) => new StdioBingoSession(binaryPath, workspace.current(), handlers),
-    (event) => sendSessionEvent(window, event)
+    (handlers, launch) => new StdioBingoSession(
+      binaryPath,
+      launch?.workspacePath ?? workspace.current(),
+      handlers,
+      process.env,
+      launch?.bindSessionWorkspace ?? false
+    ),
+    (event) => {
+      notifications.handle(event)
+      sendSessionEvent(window, event)
+    }
   )
   const home = process.env.HOME ?? process.env.USERPROFILE ?? app.getPath('home')
   const transcripts = new TranscriptRepository(join(home, '.local', 'share', 'bingo', 'transcripts'))
   const userConfigDirectory = process.env.XDG_CONFIG_HOME ?? join(home, '.config')
   const settings = new SettingsRepository(join(userConfigDirectory, 'bingo', 'settings.json'))
   const appearance = new AppearanceRepository(join(app.getPath('userData'), 'preferences.json'))
-  registerIpc(window, locator, sessions, transcripts, settings, binaryPath, appearance, workspace)
-  window.once('ready-to-show', () => window.show())
-  if (process.env.BINGO_GUI_E2E_PROMPT && !app.isPackaged) {
-    window.webContents.once('did-finish-load', () => { void runEvidence(window, process.env.BINGO_GUI_E2E_PROMPT as string, process.env.BINGO_GUI_E2E_SCENARIO) })
+  const profile = new UserProfileRepository(join(app.getPath('userData'), 'profile.json'), join(app.getPath('userData'), 'avatars'))
+  await profile.initialize().catch(() => undefined)
+  const builtinGameRoot = app.isPackaged ? join(process.resourcesPath, 'game-packs') : join(app.getAppPath(), 'games', 'build')
+  let gamePacks: GamePackRepository | undefined
+  try {
+    gamePacks = new GamePackRepository(join(app.getPath('userData'), 'game-packs'), builtinGameRoot)
+    await gamePacks.initialize()
+    gameWindows = new GameWindowManager(gamePacks, new GameProtocol(), window, (event) => {
+      if (!window.isDestroyed()) window.webContents.send(IPC.gamePackEvent, event)
+    })
+  } catch (error) {
+    gamePacks = undefined
+    gameWindows = null
+    console.error('Game package subsystem initialization failed.', error)
   }
+  registerIpc(window, locator, sessions, transcripts, settings, binaryPath, appearance, workspace, notificationPreferences, notifications, gamePacks, gameWindows ?? undefined, profile)
+  window.once('ready-to-show', () => window.show())
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void window.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
-async function runEvidence(window: BrowserWindow, prompt: string, scenario?: string): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const ready = await window.webContents.executeJavaScript(`Boolean(document.querySelector('textarea:not(:disabled)'))`)
-    if (ready) break
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  }
-  await window.webContents.executeJavaScript(`(() => { const input = document.querySelector('textarea'); const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set; setter.call(input, ${JSON.stringify(prompt)}); input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`)
-  if (scenario === 'cancel') {
-    for (let attempt = 0; attempt < 400; attempt += 1) {
-      const bounds = await window.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent === 'Cancel'); if (!button) return null; const rect = button.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }; })()`)
-      if (bounds) {
-        const start = Date.now()
-        const x = Math.round(bounds.x + bounds.width / 2), y = Math.round(bounds.y + bounds.height / 2)
-        window.webContents.sendInputEvent({ type: 'mouseDown', x, y, button: 'left', clickCount: 1 }); window.webContents.sendInputEvent({ type: 'mouseUp', x, y, button: 'left', clickCount: 1 })
-        while (!(await window.webContents.executeJavaScript(`Boolean(document.querySelector('textarea:not(:disabled)'))`))) await new Promise((resolve) => setTimeout(resolve, 20))
-        const elapsed = Date.now() - start
-        await import('node:fs/promises').then(({ writeFile }) => writeFile(join(app.getAppPath(), 'docs/m1/ac-f2-5-gui.md'), `# AC-F2-5 GUI cancellation\n\n- Cancel → composer enabled: ${elapsed}ms\n- Limit: 1000ms\n- Result: ${elapsed <= 1000 ? 'PASS' : 'FAIL'}\n- The assistant row is marked Interrupted by the reducer on turn.cancelled.\n`))
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 50))
-    }
-  }
-  if (scenario === 'new-conversation') {
-    await waitFor(window, `Boolean([...document.querySelectorAll('.message')].find((item) => item.textContent.includes('OK')))`)
-    const before = bingoChildPid()
-    await window.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find((item) => item.textContent === 'New conversation').click()`)
-    await waitFor(window, `Boolean(document.querySelector('textarea:not(:disabled)')) && document.querySelectorAll('.message').length === 0`)
-    let after: number | null = null
-    for (let attempt = 0; attempt < 100 && after === null; attempt += 1) { after = bingoChildPid(); if (after === null) await new Promise((resolve) => setTimeout(resolve, 50)) }
-    const image = await window.webContents.capturePage()
-    const fs = await import('node:fs/promises'); await fs.mkdir(join(app.getAppPath(), 'docs/screenshots/m1'), { recursive: true }); await fs.writeFile(join(app.getAppPath(), 'docs/screenshots/m1/ac-f3-2-new-conversation.png'), image.toPNG())
-    await fs.writeFile(join(app.getAppPath(), 'docs/m1/ac-f3-2-gui.md'), `# AC-F3-2 GUI New conversation\n\n- Old bingo child PID: ${before}\n- New bingo child PID: ${after}\n- Child switched: ${before !== after}\n- New UI state: empty conversation, zero old messages, no nonce.\n- Old connection events are rejected after commit 742e352.\n`)
-    return
-  }
-  await new Promise((resolve) => setTimeout(resolve, 20_000))
-  const image = await window.webContents.capturePage()
-  await import('node:fs/promises').then(({ mkdir, writeFile }) => mkdir(join(app.getAppPath(), 'docs/screenshots/m1'), { recursive: true }).then(() => writeFile(join(app.getAppPath(), 'docs/screenshots/m1', process.env.BINGO_GUI_E2E_CAPTURE ?? 'evidence.png'), image.toPNG())))
-}
-
-async function waitFor(window: BrowserWindow, expression: string): Promise<void> {
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    if (await window.webContents.executeJavaScript(expression)) return
-    await new Promise((resolve) => setTimeout(resolve, 50))
-  }
-  throw new Error(`Evidence timeout: ${expression}`)
-}
-
-function bingoChildPid(): number | null {
-  try {
-    const output = execFileSync('pgrep', ['-P', String(process.pid), '-f', 'bingo --json-events'], { encoding: 'utf8' }).trim()
-    return output ? Number(output.split('\n')[0]) : null
-  } catch {
-    return null
-  }
-}
+if (process.platform === 'win32') app.setAppUserModelId('io.github.tmeow.bingogo')
+registerGameProtocolScheme()
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
@@ -110,6 +101,8 @@ else {
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow() })
   })
   app.on('before-quit', (event) => {
+    gameWindows?.closeActive()
+    gameWindows = null
     if (!sessions) return
     event.preventDefault()
     const active = sessions

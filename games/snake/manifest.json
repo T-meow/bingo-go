@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "game",
+  "id": "io.github.tmeow.bingogo.snake",
+  "name": "贪吃蛇",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "description": "键盘与屏幕方向键都可玩的极简贪吃蛇",
+  "author": "Bingo Go",
+  "window": {
+    "width": 480,
+    "height": 700,
+    "minWidth": 360,
+    "minHeight": 620,
+    "resizable": true
+  }
+}

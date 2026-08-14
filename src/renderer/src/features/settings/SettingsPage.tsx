@@ -10,6 +10,9 @@ import { McpSettings } from './McpSettings'
 import { ProviderSettings } from './ProviderSettings'
 import type { SettingsSection } from './SettingsSidebar'
 import { ModelPicker } from '../../components/ModelPicker'
+import { NotificationSettings } from './NotificationSettings'
+import { GamePackSettings } from './GamePackSettings'
+import { ProfileSettings } from './ProfileSettings'
 
 export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo, busy, onChange, onSave, onDiscard, onSectionTransactionChange, onGoTeam, onUpsertProvider, onRemoveProvider, onUpsertMcp, onRemoveMcp, onListModels }: {
   section: SettingsSection
@@ -43,6 +46,16 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
     }).finally(() => { if (live) setModelsLoading(false) })
     return () => { live = false }
   }, [draft?.provider, section, snapshot?.revision])
+  if (section === 'profile' || section === 'appearance' || section === 'notifications' || section === 'games') {
+    const content = section === 'profile'
+      ? <ProfileSettings onTransactionChange={onSectionTransactionChange} />
+      : section === 'appearance'
+      ? <AppearanceSettings onTransactionChange={onSectionTransactionChange} />
+      : section === 'notifications'
+        ? <NotificationSettings onTransactionChange={onSectionTransactionChange} />
+        : <GamePackSettings />
+    return <main className="settings-page"><div className="settings-page-scroll">{content}</div></main>
+  }
   if (error && !snapshot) return <main className="settings-page"><div className="settings-page-scroll"><SettingsSectionLayout title="设置不可用" description="无法读取 Bingo 配置。"><Alert type="error" showIcon message={error.code} description={error.msg} /></SettingsSectionLayout></div></main>
   if (!snapshot || !draft) return <main className="settings-page"><div className="settings-loading"><Skeleton active paragraph={{ rows: 8 }} /></div></main>
   const dirty = JSON.stringify(draft) !== JSON.stringify(snapshot.values)
@@ -57,7 +70,6 @@ export function SettingsPage({ section, snapshot, draft, error, runtime, appInfo
   let content: React.ReactNode
   if (section === 'providers') content = <ProviderSettings snapshot={snapshot} error={error} busy={busy} activeProvider={(snapshot.effective ?? snapshot.values).provider} onTransactionChange={onSectionTransactionChange} onUpsert={onUpsertProvider} onRemove={onRemoveProvider} onListModels={onListModels} />
   else if (section === 'mcp') content = <McpSettings snapshot={snapshot} error={error} busy={busy} onTransactionChange={onSectionTransactionChange} onUpsert={onUpsertMcp} onRemove={onRemoveMcp} />
-  else if (section === 'appearance') content = <AppearanceSettings onTransactionChange={onSectionTransactionChange} />
   else if (section === 'general') content = <SettingsSectionLayout title="常规与运行" description="设置 Bingo 会话的默认运行参数。">
     {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
     <div className="runtime-summary"><Descriptions size="small" column={2} items={[

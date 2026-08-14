@@ -6,6 +6,9 @@ dist/
 out/
 release/
 resources/bin/
+games/build/
+games/dist/
+.codex-tmp/
 *.tsbuildinfo
 
 # Electron
@@ -14,11 +17,6 @@ npm-debug.log*
 
 # Screenshots / local artifacts
 screenshots/
-!docs/screenshots/
-!docs/screenshots/**/*.png
-*.png
-!build/icon.png
-!docs/screenshots/**/*.png
 
 # OS
 .DS_Store

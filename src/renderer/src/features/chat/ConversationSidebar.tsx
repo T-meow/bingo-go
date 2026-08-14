@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { Conversations } from '@ant-design/x'
-import { CheckSquareOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
+import { CheckSquareOutlined, DeleteOutlined, EditOutlined, FolderOutlined, PlusOutlined, WarningOutlined } from '@ant-design/icons'
 import { Alert, Button, Checkbox, Empty, Input } from 'antd'
-import type { GuiError, RuntimeInfo, SessionSummary } from '../../../../shared/contracts/ipc'
+import type { GuiError, RuntimeInfo, SessionSummary, WorkspacePreferencesV2 } from '../../../../shared/contracts/ipc'
 
-export function ConversationSidebar({ sessions, activeSession, runtime, error, busy, onCreate, onOpen, onRename, onDelete, onDeleteMany }: {
+type SessionProjectGroup = {
+  key: string
+  kind: 'current' | 'recent' | 'other' | 'unclassified'
+  path: string | null
+  sessions: SessionSummary[]
+}
+
+export function ConversationSidebar({ sessions, activeSession, runtime, workspacePreferences, error, busy, onCreate, onOpen, onRename, onDelete, onDeleteMany }: {
   sessions: SessionSummary[]
   activeSession: SessionSummary | null
   runtime: RuntimeInfo | null
+  workspacePreferences: WorkspacePreferencesV2 | null
   error: GuiError | null
   busy: boolean
   onCreate: () => void
@@ -25,13 +33,18 @@ export function ConversationSidebar({ sessions, activeSession, runtime, error, b
   const skipRenameCommit = useRef(false)
   const byId = new Map(sessions.map((session) => [session.id, session]))
   const normalizedQuery = query.trim().toLocaleLowerCase('zh-CN')
-  const visibleSessions = normalizedQuery
-    ? sessions.filter((session) => `${session.name}\n${session.preview}`.toLocaleLowerCase('zh-CN').includes(normalizedQuery))
-    : sessions
+  const visibleSessions = sessions.filter((session) => sessionMatchesSearch(session, normalizedQuery))
+  const projectGroups = groupSessionsByProject(visibleSessions, workspacePreferences ?? (runtime ? { schemaVersion: 2, currentPath: runtime.workspacePath, recentPaths: [runtime.workspacePath] } : null))
+  const groupByKey = new Map(projectGroups.map((group) => [group.key, group]))
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([])
   useEffect(() => {
     const available = new Set(sessions.map((session) => session.id))
     setSelected((current) => new Set([...current].filter((id) => available.has(id))))
   }, [sessions])
+  useEffect(() => {
+    const defaults = projectGroups.filter((group) => group.kind === 'current' || group.kind === 'unclassified').map((group) => group.key)
+    setExpandedGroups((current) => [...new Set([...current.filter((key) => projectGroups.some((group) => group.key === key)), ...defaults])])
+  }, [sessions, workspacePreferences?.currentPath])
   const toggle = (id: string): void => setSelected((current) => {
     const next = new Set(current)
     if (next.has(id)) next.delete(id)
@@ -69,15 +82,33 @@ export function ConversationSidebar({ sessions, activeSession, runtime, error, b
         : <Conversations
             rootClassName="session-conversations"
             activeKey={selectionMode ? undefined : activeSession?.id}
-            items={visibleSessions.map((session) => ({
+            items={projectGroups.flatMap((group) => group.sessions.map((session) => ({
               key: session.id,
-              group: sessionGroup(session.updatedAt),
+              group: group.key,
               label: <span className="session-select-row">{selectionMode && <Checkbox aria-label={`选择 ${session.name}`} checked={selected.has(session.id)} onClick={(event) => event.stopPropagation()} onChange={() => toggle(session.id)} />}{editingId === session.id
                 ? <Input autoFocus size="small" value={editingName} maxLength={80} aria-label="对话名称" onClick={(event) => event.stopPropagation()} onChange={(event) => setEditingName(event.target.value)} onPressEnter={() => void commitRename()} onKeyDown={(event) => { if (event.key === 'Escape') { skipRenameCommit.current = true; setEditingId(null) } }} onBlur={() => void commitRename()} />
-                : <span className="session-label" onDoubleClick={(event) => { event.stopPropagation(); startRename(session) }}><strong>{session.name}</strong><small>{session.preview || '空对话'}</small><time dateTime={session.updatedAt}>{formatSessionTime(session.updatedAt)}</time></span>}</span>,
+                : <span className="session-label" onDoubleClick={(event) => { event.stopPropagation(); startRename(session) }}>
+                    <span className="session-name-row"><strong>{session.name}</strong>{session.parentSessionId && <span className="session-branch-badge" title={`来源：${session.parentSessionId}`}>分支</span>}</span>
+                    <small>{session.preview || '空对话'}</small>
+                    {session.parentSessionId && <small className="session-fork-source" title={session.parentSessionId}>来源 · {session.parentSessionId}</small>}
+                    <time dateTime={session.updatedAt}>{formatSessionTime(session.updatedAt)}</time>
+                  </span>}</span>,
               disabled: !selectionMode && busy && activeSession?.id !== session.id
-            }))}
-            groupable
+            })))}
+            groupable={{
+              collapsible: true,
+              expandedKeys: normalizedQuery ? projectGroups.map((group) => group.key) : expandedGroups,
+              onExpand: setExpandedGroups,
+              label: (key) => {
+                const group = groupByKey.get(key)
+                if (!group) return key
+                return <span className="session-project-group">
+                  {group.kind === 'unclassified' ? <WarningOutlined /> : <FolderOutlined />}
+                  <span><strong>{projectGroupTitle(group)}</strong><small title={group.path ?? undefined}>{group.path ?? '打开前需选择项目'}</small></span>
+                  <i>{group.sessions.length}</i>
+                </span>
+              }
+            }}
             creation={selectionMode ? undefined : { icon: <PlusOutlined />, label: '新建对话', disabled: busy, onClick: onCreate }}
             onActiveChange={(key) => { const id = String(key); if (selectionMode) toggle(id); else { const session = byId.get(id); if (session) onOpen(session) } }}
             menu={selectionMode ? undefined : (item) => ({
@@ -113,19 +144,64 @@ function formatSessionTime(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date)
 }
 
-function sessionGroup(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '更早'
-  const today = new Date()
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
-  const day = 24 * 60 * 60 * 1000
-  if (date.getTime() >= start) return '今天'
-  if (date.getTime() >= start - day) return '昨天'
-  if (date.getTime() >= start - 7 * day) return '最近 7 天'
-  return '更早'
+export function sessionMatchesSearch(session: SessionSummary, normalizedQuery: string): boolean {
+  if (!normalizedQuery) return true
+  const path = session.workspacePath ?? ''
+  return `${session.name}\n${session.preview}\n${workspaceName(path)}\n${path}`.toLocaleLowerCase('zh-CN').includes(normalizedQuery)
+}
+
+export function groupSessionsByProject(sessions: SessionSummary[], preferences: WorkspacePreferencesV2 | null): SessionProjectGroup[] {
+  const sorted = [...sessions].sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+  const grouped = new Map<string, { path: string; sessions: SessionSummary[] }>()
+  const unclassified: SessionSummary[] = []
+  for (const session of sorted) {
+    if (!session.workspacePath) {
+      unclassified.push(session)
+      continue
+    }
+    const key = comparableWorkspacePath(session.workspacePath)
+    const group = grouped.get(key) ?? { path: session.workspacePath, sessions: [] }
+    group.sessions.push(session)
+    grouped.set(key, group)
+  }
+
+  const result: SessionProjectGroup[] = []
+  const take = (path: string, kind: SessionProjectGroup['kind']): void => {
+    const key = comparableWorkspacePath(path)
+    const group = grouped.get(key)
+    if (!group) return
+    result.push({ key: workspaceGroupKey(key), kind, path: group.path, sessions: group.sessions })
+    grouped.delete(key)
+  }
+  if (preferences) {
+    take(preferences.currentPath, 'current')
+    preferences.recentPaths.filter((path) => comparableWorkspacePath(path) !== comparableWorkspacePath(preferences.currentPath)).forEach((path) => take(path, 'recent'))
+  }
+  ;[...grouped.entries()]
+    .sort((left, right) => Date.parse(right[1].sessions[0]?.updatedAt ?? '') - Date.parse(left[1].sessions[0]?.updatedAt ?? ''))
+    .forEach(([key, group]) => result.push({ key: workspaceGroupKey(key), kind: 'other', path: group.path, sessions: group.sessions }))
+  if (unclassified.length > 0) result.push({ key: 'workspace:unclassified', kind: 'unclassified', path: null, sessions: unclassified })
+  return result
 }
 
 function workspaceName(path: string): string {
   const normalized = path.replace(/[\\/]+$/, '')
   return normalized.split(/[\\/]/).at(-1) || path
+}
+
+function comparableWorkspacePath(path: string): string {
+  const normalized = path.replace(/[\\/]+$/, '')
+  return /^[a-z]:[\\/]/i.test(normalized) || normalized.startsWith('\\\\') ? normalized.toLocaleLowerCase('en-US') : normalized
+}
+
+function workspaceGroupKey(path: string): string {
+  return `workspace:${path}`
+}
+
+function projectGroupTitle(group: SessionProjectGroup): string {
+  if (group.kind === 'unclassified') return '未归类'
+  const name = workspaceName(group.path ?? '')
+  if (group.kind === 'current') return `当前项目 · ${name}`
+  if (group.kind === 'recent') return `最近项目 · ${name}`
+  return `其他项目 · ${name}`
 }

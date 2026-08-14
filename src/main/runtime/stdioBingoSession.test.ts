@@ -71,6 +71,26 @@ let buffer=''; process.stdin.on('data', chunk => { buffer += chunk; let i; while
     await session.close()
   })
 
+  it('round-trips bingo-owned session forks without switching the source process', async () => {
+    const childId = 'session-child'
+    const binary = await fixture(`#!/usr/bin/env node
+let seq=1, id=${JSON.stringify(sessionId)}
+const metadata={bingoVersion:'1.0',protocolVersion:1,sessionId:id,displayName:'Source',transcriptPath:'/tmp/source',resumed:true,cwd:process.cwd(),provider:'default',model:'test',thinkingLevel:'off',permissionMode:'default',theme:'auto',supportsImages:false,capabilities:['session.fork.v1'],transcriptRevision:'${'a'.repeat(64)}'}
+console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.ready',metadata}))
+let buffer=''; process.stdin.on('data', chunk => { buffer += chunk; let i; while ((i=buffer.indexOf('\\n')) >= 0) { const line=buffer.slice(0,i); buffer=buffer.slice(i+1); if (!line) continue; const c=JSON.parse(line); if(c.type==='session.fork'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.forked',commandId:c.commandId,sourceSessionId:id,reason:c.reason,metadata:{...metadata,sessionId:${JSON.stringify(childId)},displayName:'Branch',transcriptPath:'/tmp/child',parentSessionId:id,forkReason:c.reason},warnings:['repaired 1 interrupted tool call(s)']})); } else if(c.type==='session.close'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.closed',commandId:c.commandId})); process.exit(0); } } })
+`)
+    const session = new StdioBingoSession(binary, process.cwd(), { onEvent: vi.fn(), onExit: vi.fn() })
+    await session.open(sessionId)
+
+    await expect(session.fork('recover-interrupted')).resolves.toMatchObject({
+      sourceSessionId: sessionId,
+      reason: 'recover-interrupted',
+      metadata: { sessionId: childId, parentSessionId: sessionId, forkReason: 'recover-interrupted' },
+      warnings: ['repaired 1 interrupted tool call(s)']
+    })
+    await session.close()
+  })
+
   it('registers an image before sending a turn', async () => {
     const binary = await fixture(`#!/usr/bin/env node
 let seq=1, id=${JSON.stringify(sessionId)}
@@ -83,11 +103,31 @@ let buffer=''; process.stdin.on('data', chunk => { buffer += chunk; let i; while
     await session.close()
   })
 
+  it('subscribes to context usage and enables explicit workspace binding', async () => {
+    const binary = await fixture(`#!/usr/bin/env node
+let seq=1, id=${JSON.stringify(sessionId)}
+if (!process.argv.includes('--bind-session-workspace')) process.exit(9)
+console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.ready',metadata:{bingoVersion:'1.0',protocolVersion:1,sessionId:id,displayName:'Context',transcriptPath:'/tmp/context',resumed:true,cwd:process.cwd(),provider:'default',model:'test',thinkingLevel:'off',permissionMode:'default',theme:'auto',supportsImages:false,capabilities:['session.context.v1','session.workspace.v1']}}))
+process.stdin.on('data', data => { for (const line of data.toString().trim().split('\\n')) { const c=JSON.parse(line); if(c.type==='context.subscribe') console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'context.usage',commandId:c.commandId,usedTokens:420,contextWindow:128000})); else if(c.type==='session.close'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.closed',commandId:c.commandId})); process.exit(0); } } })
+`)
+    const session = new StdioBingoSession(binary, process.cwd(), { onEvent: vi.fn(), onExit: vi.fn() }, process.env, true)
+
+    await session.open(sessionId)
+    await expect(session.subscribeContext()).resolves.toEqual({ usedTokens: 420, contextWindow: 128_000 })
+    await session.close()
+  })
+
   it('round-trips Team workspace snapshots and saves through command responses', async () => {
     const definition: TeamDefinition = {
-      schemaVersion: 1,
+      schemaVersion: 2,
+      teamId: 'team-reviewers',
       name: 'reviewers',
-      members: [{ name: 'reviewer', agent: 'reviewer' }]
+      members: [{
+        memberId: 'member-reviewer',
+        name: 'reviewer',
+        agent: 'reviewer',
+        profile: { constraints: [], preferences: [] }
+      }]
     }
     const snapshot: TeamSnapshot = {
       available: true,
@@ -115,6 +155,30 @@ let buffer=''; process.stdin.on('data', chunk => { buffer += chunk; let i; while
       revision: 'b'.repeat(64),
       definition: { futureField: { keep: true } }
     })
+    await session.close()
+  })
+
+  it('round-trips team-task commands and forwards commandless task messages', async () => {
+    const member = { memberId: 'member-reviewer', name: 'reviewer', agent: 'reviewer', description: 'Reviews code', system: 'Review.', inheritSystem: true, profile: { constraints: [], preferences: [] }, team: 'reviewers', directory: '/tmp' }
+    const summary = { id: 'task-1', title: 'Review', status: 'running', participants: [member], leader: 'reviewer', projectPath: '/tmp', branch: 'main', createdAt: 1, updatedAt: 1, messageCount: 1, reviewSummary: null }
+    const task = { schemaVersion: 1, ...summary, projectKey: 'project', team: 'reviewers', description: 'Review changes', channel: '__task_task-1', messages: [{ seq: 1, kind: 'user', from: 'user', text: 'Review changes', at: 1 }] }
+    delete (task as Partial<typeof summary>).messageCount
+    delete (task as Partial<typeof summary>).reviewSummary
+    const binary = await fixture([
+      'let seq=1, id=' + JSON.stringify(sessionId),
+      'const summary=' + JSON.stringify(summary),
+      'const task=' + JSON.stringify(task),
+      "console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.ready',metadata:{bingoVersion:'1.0',protocolVersion:1,sessionId:id,displayName:'Tasks',transcriptPath:'/tmp/tasks',resumed:false,cwd:process.cwd(),provider:'default',model:'test',thinkingLevel:'off',permissionMode:'default',theme:'auto',supportsImages:false,capabilities:['team.workspace.v1','team.tasks.v1']}}))",
+      "let buffer=''; process.stdin.on('data', chunk => { buffer += chunk; let i; while ((i=buffer.indexOf('\\n')) >= 0) { const line=buffer.slice(0,i); buffer=buffer.slice(i+1); if (!line) continue; const c=JSON.parse(line); if(c.type==='team.task.list'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'team.task.message',taskId:'task-1',message:{seq:2,kind:'member',from:'reviewer',text:'Working',at:2}})); console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'team.tasks.snapshot',commandId:c.commandId,branch:'main',tasks:[summary]})); } else if(c.type==='team.task.get'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'team.task.updated',commandId:c.commandId,action:'loaded',task:summary,detail:task})); } else if(c.type==='team.task.post'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'team.task.updated',commandId:c.commandId,action:'posted',task:{...summary,messageCount:2}})); } else if(c.type==='session.close'){ console.log(JSON.stringify({protocolVersion:1,seq:seq++,sessionId:id,type:'session.closed',commandId:c.commandId})); process.exit(0); } } })"
+    ].join('\n'))
+    const events = vi.fn()
+    const session = new StdioBingoSession(binary, process.cwd(), { onEvent: events, onExit: vi.fn() })
+
+    await session.open()
+    await expect(session.listTeamTasks()).resolves.toEqual({ branch: 'main', tasks: [summary] })
+    await vi.waitFor(() => expect(events).toHaveBeenCalledWith(expect.objectContaining({ type: 'team.task.message', taskId: 'task-1' })))
+    await expect(session.getTeamTask('task-1', undefined, 100)).resolves.toMatchObject({ id: 'task-1', messages: [{ seq: 1 }] })
+    await expect(session.postTeamTask('task-1', 'Continue')).resolves.toMatchObject({ id: 'task-1', messageCount: 2 })
     await session.close()
   })
 })

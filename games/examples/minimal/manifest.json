@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "kind": "game",
+  "id": "com.example.counter",
+  "name": "Counter",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "description": "Minimal Bingo Go game package example",
+  "author": "Example",
+  "window": { "width": 400, "height": 480, "minWidth": 320, "minHeight": 400, "resizable": true }
+}

@@ -6,7 +6,14 @@ export const BINGO_VERSION = 'bingo 0.4.0'
 export const REQUIRED_CAPABILITIES = [
   'settings.inspect.v1',
   'team.workspace.v1',
-  'attachments.input.v1'
+  'team.tasks.v1',
+  'team.blueprint.v2',
+  'team.lobby.v1',
+  'team.presets.v1',
+  'team.member.profile.v1',
+  'attachments.input.v1',
+  'session.workspace.v1',
+  'session.context.v1'
 ]
 
 export function inspectBingo(binaryPath) {

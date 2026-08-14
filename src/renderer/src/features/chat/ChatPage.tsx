@@ -1,15 +1,30 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import Markdown from 'react-markdown'
-import { Actions, Attachments, Bubble, Prompts, Sender, ThoughtChain, Welcome, type BubbleItemType, type ThoughtChainItemType } from '@ant-design/x'
-import { AppstoreOutlined, CheckCircleOutlined, CheckOutlined, CopyOutlined, DownOutlined, FolderOpenOutlined, PaperClipOutlined, RobotOutlined, SafetyCertificateOutlined, SendOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
-import { Alert, Avatar, Button, Image, Input, Modal, Popover, Select, Space, Tag, Tooltip, Typography, Upload } from 'antd'
-import type { PromptResponse } from '../../../../shared/contracts/cli'
-import type { GuiError, MessageImageAttachment, RuntimeSettings, SessionSummary, WorkspacePreferencesV2 } from '../../../../shared/contracts/ipc'
+import { Attachments, Bubble, Prompts, Sender, ThoughtChain, Welcome, type BubbleItemType, type ThoughtChainItemType } from '@ant-design/x'
+import { AppstoreOutlined, CheckCircleOutlined, CheckOutlined, CloseOutlined, CopyOutlined, DownOutlined, EditOutlined, FolderOpenOutlined, PaperClipOutlined, PlayCircleOutlined, RobotOutlined, SafetyCertificateOutlined, SendOutlined, ToolOutlined, UserOutlined, WarningOutlined } from '@ant-design/icons'
+import { Alert, Avatar, Button, Image, Input, Modal, Popover, Progress, Select, Space, Tag, Tooltip, Typography, Upload } from 'antd'
+import type { ContextUsage, PromptResponse } from '../../../../shared/contracts/cli'
+import type { GuiError, MessageImageAttachment, PermissionMode, RuntimeSettings, SessionSummary, WorkspacePreferencesV2 } from '../../../../shared/contracts/ipc'
 import { ModelPicker } from '../../components/ModelPicker'
 import type { ChatMessage, ChatState, ChatTimelineItem, PromptRequest, ToolActivity } from '../../state/chatReducer'
 import { IMAGE_ACCEPT, MAX_ATTACHMENTS, type ComposerImageAttachment } from './attachments'
 
-export function ChatPage({ state, activeSession, ready, connected, sessionOperation, runtimeSettings, selectedProvider, selectedModel, models, thinkingLevel, settingsError, savingRuntime, draft, attachments, attachmentCapability, workspacePreferences, workspaceBusy, selectedToolId, onSelectTool, onDraftChange, onAddAttachments, onRemoveAttachment, onWorkspaceChange, onProviderChange, onModelChange, onThinkingChange, onSaveRuntime, onSubmit, onCancel, onRespond }: {
+type MessageAction = {
+  key: string
+  label: string
+  icon: ReactNode
+  onClick: () => void
+}
+
+function MessageActions({ actions }: { actions: MessageAction[] }): React.JSX.Element {
+  return <div className="message-actions" role="group" aria-label="消息操作">
+    {actions.map((action) => <Tooltip key={action.key} title={action.label}>
+      <Button type="text" size="small" icon={action.icon} aria-label={action.label} onClick={action.onClick} />
+    </Tooltip>)}
+  </div>
+}
+
+export function ChatPage({ state, activeSession, ready, connected, sessionOperation, runtimeSettings, selectedProvider, selectedModel, models, thinkingLevel, permissionMode, settingsError, savingRuntime, draft, attachments, attachmentCapability, forkCapability, editing, workspacePreferences, workspaceBusy, selectedToolId, onSelectTool, onDraftChange, onAddAttachments, onRemoveAttachment, onWorkspaceChange, onProviderChange, onModelChange, onThinkingChange, onPermissionModeChange, onSaveRuntime, onSubmit, onCancel, onRespond, onCopyMessage, onEditMessage, onCancelEdit, onContinue }: {
   state: ChatState
   activeSession: SessionSummary | null
   ready: boolean
@@ -20,11 +35,14 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
   selectedModel: string
   models: string[]
   thinkingLevel: RuntimeSettings['thinkingLevel']
+  permissionMode: PermissionMode
   settingsError: GuiError | null
   savingRuntime: boolean
   draft: string
   attachments: ComposerImageAttachment[]
   attachmentCapability: boolean
+  forkCapability: boolean
+  editing: boolean
   workspacePreferences: WorkspacePreferencesV2 | null
   workspaceBusy: boolean
   selectedToolId: string | null
@@ -36,21 +54,34 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
   onProviderChange: (provider: string) => void
   onModelChange: (model: string) => void
   onThinkingChange: (level: RuntimeSettings['thinkingLevel']) => void
+  onPermissionModeChange: (mode: PermissionMode) => void
   onSaveRuntime: () => void
   onSubmit: (message?: string) => void
   onCancel: () => void
   onRespond: (response: PromptResponse) => void
+  onCopyMessage: (message: ChatMessage) => void
+  onEditMessage: (message: ChatMessage) => void
+  onCancelEdit: () => void
+  onContinue: () => void
 }): React.JSX.Element {
   const attachmentsRef = useRef<React.ComponentRef<typeof Attachments>>(null)
   const chatScrollRef = useRef<HTMLElement>(null)
   const followOutputRef = useRef(true)
   const [showScrollButton, setShowScrollButton] = useState(false)
+  const [permissionMenuOpen, setPermissionMenuOpen] = useState(false)
   const prompt = state.prompts[0]
   const bubbleItems = conversationItems(state.timeline).map((item): BubbleItemType => {
-    if (item.role === 'user') return {
+    if (item.role === 'user') {
+      const actions: MessageAction[] = []
+      if (item.message.markdown) actions.push({ key: 'copy', label: '复制', icon: <CopyOutlined />, onClick: () => onCopyMessage(item.message) })
+      if (forkCapability && item.message.editable && !state.turnId && !sessionOperation) actions.push({ key: 'edit', label: '编辑', icon: <EditOutlined />, onClick: () => onEditMessage(item.message) })
+      if (!editing && state.recovery?.turnId === item.message.turnId && (state.recovery.kind !== 'transport-crash' || forkCapability)) actions.push({ key: 'continue', label: state.recovery.kind === 'transport-crash' ? '恢复并继续' : '继续任务', icon: <PlayCircleOutlined />, onClick: onContinue })
+      return {
       key: item.key,
       role: 'user',
-      content: <MessageContent markdown={item.message.markdown} attachments={item.message.attachments} />
+      content: <MessageContent markdown={item.message.markdown} attachments={item.message.attachments} />,
+      footer: actions.length > 0 ? <MessageActions actions={actions} /> : undefined
+      }
     }
     const messages = item.blocks.flatMap((block) => block.type === 'message' ? [block.value] : [])
     const markdown = messages.map((message) => message.markdown).filter(Boolean).join('\n\n')
@@ -62,12 +93,13 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
       content: <AssistantTurn blocks={item.blocks} selectedToolId={selectedToolId} onSelectTool={onSelectTool} />,
       streaming,
       status: interrupted ? 'abort' : streaming ? 'updating' : 'success',
-      footer: markdown ? <Actions items={[{ key: 'copy', label: '复制', icon: <CopyOutlined />, onItemClick: () => void navigator.clipboard?.writeText(markdown) }]} /> : undefined
+      footer: markdown ? <MessageActions actions={[{ key: 'copy', label: '复制', icon: <CopyOutlined />, onClick: () => onCopyMessage({ id: item.key, turnId: null, role: 'assistant', markdown }) }]} /> : undefined
     }
   })
   const provider = runtimeSettings?.providers.find((item) => item.name === selectedProvider)
   const runtimeDirty = Boolean(runtimeSettings && (selectedProvider !== runtimeSettings.provider || selectedModel !== runtimeSettings.model || thinkingLevel !== runtimeSettings.thinkingLevel))
   const controlsDisabled = Boolean(state.turnId) || sessionOperation
+  const runtimeControlsDisabled = controlsDisabled || editing
   const providerSupportsImages = Boolean(provider?.supportsImages)
   const canSubmit = Boolean(draft.trim() || attachments.length) && ready && !sessionOperation
   const attachmentItems = attachments.map((attachment) => ({
@@ -125,6 +157,7 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
       </section>
       {showScrollButton && <Tooltip title="回到最新消息"><Button className="scroll-latest" shape="circle" icon={<DownOutlined />} aria-label="回到最新消息" onClick={scrollToLatest} /></Tooltip>}
       <footer className="sender-zone">
+        {editing && <div className="composer-editing-bar"><span><EditOutlined /> 正在编辑并创建分支</span><Button type="text" size="small" icon={<CloseOutlined />} aria-label="取消编辑" onClick={onCancelEdit} /></div>}
         {attachmentCapability && attachments.length > 0 && <Attachments
           className="composer-attachments"
           items={attachmentItems}
@@ -151,7 +184,7 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
           value={draft}
           loading={Boolean(state.turnId)}
           disabled={!ready || sessionOperation}
-          placeholder={ready ? '给 Bingo 发送消息' : '正在读取 Bingo 配置'}
+          placeholder={editing ? '修改提示词后发送，将创建新分支' : ready ? '给 Bingo 发送消息' : '正在读取 Bingo 配置'}
           autoSize={{ minRows: 2, maxRows: 7 }}
           onChange={onDraftChange}
           onSubmit={(message) => { followOutputRef.current = true; onSubmit(message) }}
@@ -177,20 +210,29 @@ export function ChatPage({ state, activeSession, ready, connected, sessionOperat
               value={workspacePreferences.currentPath}
               suffixIcon={<FolderOpenOutlined />}
               popupMatchSelectWidth={360}
-              disabled={controlsDisabled || workspaceBusy}
+              disabled={runtimeControlsDisabled || workspaceBusy}
               options={workspaceOptions(workspacePreferences)}
               onChange={(value) => onWorkspaceChange(value === CHOOSE_WORKSPACE ? undefined : value)}
             />}
             <Popover placement="topLeft" trigger="click" content={<div className="runtime-profile-popover">
-              <label><span>Provider</span><Select aria-label="Provider" value={selectedProvider} popupMatchSelectWidth={false} disabled={controlsDisabled} options={runtimeSettings.providers.map((item) => ({ value: item.name, label: `${item.name}${item.credentialConfigured ? '' : ' · 未配置'}` }))} onChange={onProviderChange} /></label>
-              <label><span>Model</span><ModelPicker ariaLabel="Model" value={selectedModel} models={models} disabled={controlsDisabled} onChange={onModelChange} /></label>
-              <label><span>Thinking</span><Select aria-label="Thinking level" value={thinkingLevel} popupMatchSelectWidth={false} disabled={controlsDisabled} options={thinkingOptions} onChange={onThinkingChange} /></label>
-              <Button block type="primary" icon={<CheckOutlined />} loading={savingRuntime} disabled={!runtimeDirty || !selectedModel.trim() || controlsDisabled} onClick={onSaveRuntime}>应用会话配置</Button>
+              <label><span>Provider</span><Select aria-label="Provider" value={selectedProvider} popupMatchSelectWidth={false} disabled={runtimeControlsDisabled} options={runtimeSettings.providers.map((item) => ({ value: item.name, label: `${item.name}${item.credentialConfigured ? '' : ' · 未配置'}` }))} onChange={onProviderChange} /></label>
+              <label><span>Model</span><ModelPicker ariaLabel="Model" value={selectedModel} models={models} disabled={runtimeControlsDisabled} onChange={onModelChange} /></label>
+              <label><span>Thinking</span><Select aria-label="Thinking level" value={thinkingLevel} popupMatchSelectWidth={false} disabled={runtimeControlsDisabled} options={thinkingOptions} onChange={onThinkingChange} /></label>
+              <Button block type="primary" icon={<CheckOutlined />} loading={savingRuntime} disabled={!runtimeDirty || !selectedModel.trim() || runtimeControlsDisabled || savingRuntime} onClick={onSaveRuntime}>应用会话配置</Button>
             </div>}>
-              <Button className="runtime-profile-button" type={runtimeDirty ? 'primary' : 'text'} size="small" icon={<RobotOutlined />} disabled={controlsDisabled}>{selectedModel || selectedProvider || '选择模型'} · {thinkingLevel}</Button>
+              <Button className="runtime-profile-button" type={runtimeDirty ? 'primary' : 'text'} size="small" icon={<RobotOutlined />} disabled={runtimeControlsDisabled || savingRuntime}>{selectedModel || selectedProvider || '选择模型'} · {thinkingLevel}</Button>
+            </Popover>
+            <Popover
+              placement="topLeft"
+              trigger="click"
+              open={permissionMenuOpen}
+              onOpenChange={setPermissionMenuOpen}
+              content={<PermissionModeMenu value={permissionMode} onChange={(mode) => { setPermissionMenuOpen(false); onPermissionModeChange(mode) }} />}
+            >
+              <Button className="permission-mode-button" type="text" size="small" icon={<SafetyCertificateOutlined />} loading={savingRuntime} disabled={runtimeControlsDisabled || savingRuntime} aria-label={`权限审批：${permissionModeLabel(permissionMode)}`}>{permissionModeLabel(permissionMode)}</Button>
             </Popover>
           </Space>}
-          <Typography.Text type="secondary" className="sender-status">{state.turnId ? 'Bingo 正在处理，可随时停止' : sessionOperation ? '正在准备对话' : connected ? '会话已连接' : ready ? '首次发送时创建对话' : '等待运行时'}</Typography.Text>
+          <Typography.Text type="secondary" className="sender-status">{editing ? '原对话保持不变' : state.turnId ? 'Bingo 正在处理，可随时停止' : sessionOperation ? '正在准备对话' : connected ? '会话已连接' : ready ? '首次发送时创建对话' : '等待运行时'}</Typography.Text>
         </div>
       </footer>
       {prompt && <PromptDialog prompt={prompt} onRespond={onRespond} />}
@@ -244,10 +286,15 @@ function AssistantTurn({ blocks, selectedToolId, onSelectTool }: { blocks: ChatT
 
 function ToolActivityGroup({ tools, selectedToolId, onSelectTool }: { tools: ToolActivity[]; selectedToolId: string | null; onSelectTool: (toolId: string) => void }): React.JSX.Element {
   const running = tools.filter((tool) => tool.status === 'running').length
-  return <section className="message-tool-chain">
-    <div className="section-kicker"><ToolOutlined /> {running ? `${running} 项工具正在运行` : `${tools.length} 项工具活动`}</div>
-    <ThoughtChain items={toolsToThoughts(tools, onSelectTool, selectedToolId)} />
-  </section>
+  return <details className="message-tool-chain">
+    <summary className="message-tool-summary">
+      <span className="section-kicker"><ToolOutlined /> {running ? `${running} 项工具正在运行` : `${tools.length} 项工具活动`}</span>
+      <DownOutlined className="message-tool-expand-icon" aria-hidden />
+    </summary>
+    <div className="message-tool-chain-body">
+      <ThoughtChain items={toolsToThoughts(tools, onSelectTool, selectedToolId)} />
+    </div>
+  </details>
 }
 
 function workspaceOptions(preferences: WorkspacePreferencesV2): Array<{ value: string; label: string }> {
@@ -322,9 +369,60 @@ const thinkingOptions: Array<{ value: RuntimeSettings['thinkingLevel']; label: s
   { value: 'max', label: 'Thinking Max' }
 ]
 
-export function ChatInspector({ tools, selectedToolId, onSelectTool }: { tools: ToolActivity[]; selectedToolId: string | null; onSelectTool: (toolId: string) => void }): React.JSX.Element {
+const permissionModeOptions: Array<{ value: PermissionMode; label: string; description: string; danger?: boolean; icon: React.ReactNode }> = [
+  { value: 'default', label: '请求批准', description: '非只读工具执行前请求批准', icon: <SafetyCertificateOutlined /> },
+  { value: 'acceptEdits', label: '帮我批准', description: '自动允许常规编辑，其他风险操作请求批准', icon: <CheckCircleOutlined /> },
+  { value: 'bypassPermissions', label: '完全访问权限', description: '绕过大部分审批；敏感路径和 Ask 规则除外', danger: true, icon: <WarningOutlined /> },
+  { value: 'plan', label: '计划模式', description: '只允许读取和任务规划，拒绝其他工具', icon: <RobotOutlined /> },
+  { value: 'dontAsk', label: '不询问', description: '不弹出审批，自动拒绝需批准的工具', icon: <CheckOutlined /> }
+]
+
+function PermissionModeMenu({ value, onChange }: { value: PermissionMode; onChange: (mode: PermissionMode) => void }): React.JSX.Element {
+  return <div className="permission-mode-popover" role="menu" aria-label="权限审批模式">
+    <header>应如何批准 Bingo 操作？</header>
+    {permissionModeOptions.map((option) => <button key={option.value} type="button" role="menuitemradio" aria-checked={value === option.value} className={`permission-mode-option${option.danger ? ' danger' : ''}`} onClick={() => onChange(option.value)}>
+      <span className="permission-mode-option-icon">{option.icon}</span>
+      <span><strong>{option.label}</strong><small>{option.description}</small></span>
+      <CheckOutlined className={`permission-mode-option-check${value === option.value ? ' selected' : ''}`} />
+    </button>)}
+  </div>
+}
+
+function permissionModeLabel(mode: PermissionMode): string {
+  return permissionModeOptions.find((option) => option.value === mode)?.label ?? '权限审批'
+}
+
+export type ContextUsageBand = 'normal' | 'warning' | 'danger'
+
+export function contextUsageBand(usage: ContextUsage): ContextUsageBand {
+  const scaled = usage.usedTokens * 100
+  if (scaled > usage.contextWindow * 90) return 'danger'
+  if (scaled >= usage.contextWindow * 70) return 'warning'
+  return 'normal'
+}
+
+export function ChatInspector({ tools, selectedToolId, contextUsage, contextCapability, provider, model, onSelectTool }: {
+  tools: ToolActivity[]
+  selectedToolId: string | null
+  contextUsage: ContextUsage | null
+  contextCapability: boolean
+  provider: string
+  model: string
+  onSelectTool: (toolId: string) => void
+}): React.JSX.Element {
   const selected = tools.find((tool) => tool.id === selectedToolId) ?? tools.at(-1)
-  return <div className="inspector-content"><header><span>运行检查器</span><strong>{tools.length ? `${tools.length} 项工具活动` : '会话活动'}</strong></header>{tools.length === 0
+  const percent = contextUsage ? Math.floor(contextUsage.usedTokens * 100 / contextUsage.contextWindow) : 0
+  const remaining = contextUsage ? Math.max(0, contextUsage.contextWindow - contextUsage.usedTokens) : 0
+  const band = contextUsage ? contextUsageBand(contextUsage) : 'normal'
+  return <div className="inspector-content"><header><span>运行检查器</span><strong>{tools.length ? `${tools.length} 项工具活动` : '会话活动'}</strong></header>
+    <section className={`context-usage context-usage-${band}`} aria-label="上下文估算">
+      <div className="context-usage-heading"><div><span>上下文估算</span><strong>{contextUsage ? `${percent}%` : '不可用'}</strong></div>{contextUsage && <span>{formatTokens(contextUsage.usedTokens)} / {formatTokens(contextUsage.contextWindow)}</span>}</div>
+      {contextUsage
+        ? <><Progress percent={Math.min(100, percent)} showInfo={false} strokeColor="currentColor" railColor="var(--rei-border)" size="small" /><dl><dt>已用</dt><dd>{formatTokens(contextUsage.usedTokens)}</dd><dt>窗口</dt><dd>{formatTokens(contextUsage.contextWindow)}</dd><dt>剩余</dt><dd>{formatTokens(remaining)}</dd></dl></>
+        : <Typography.Text type="secondary">{contextCapability ? '正在读取估算…' : '当前 Bingo 版本不支持此数据'}</Typography.Text>}
+      <dl className="context-runtime-profile"><dt>Provider</dt><dd>{provider || '未设置'}</dd><dt>Model</dt><dd>{model || '未设置'}</dd></dl>
+    </section>
+    {tools.length === 0
     ? <div className="inspector-empty"><CheckCircleOutlined /><span>当前没有工具活动</span></div>
     : <>
       <div className="inspector-tool-list" role="list">{tools.map((tool) => <button key={tool.id} type="button" className={`inspector-tool-row${selected?.id === tool.id ? ' active' : ''}`} onClick={() => onSelectTool(tool.id)}>
@@ -358,10 +456,15 @@ function DelayedThinking(): React.JSX.Element | null {
 
 function PromptDialog({ prompt, onRespond }: { prompt: PromptRequest; onRespond: (response: PromptResponse) => void }): React.JSX.Element {
   const [text, setText] = useState('')
-  return <Modal open title={prompt.title} closable={false} maskClosable={false} keyboard={false} footer={null}>
-    <Typography.Paragraph>{prompt.question}</Typography.Paragraph>
+  return <Modal className="prompt-dialog" open title={prompt.title} width={560} closable={false} maskClosable={false} keyboard={false} footer={null}>
+    <Typography.Paragraph className="prompt-question">{prompt.question}</Typography.Paragraph>
     <Space direction="vertical" className="prompt-options">
-      {prompt.options.map((option) => <Button key={option.id} block onClick={() => onRespond({ kind: 'option', optionId: option.id })}><span>{option.label}</span>{option.description && <small>{option.description}</small>}</Button>)}
+      {prompt.options.map((option) => <Button className="prompt-option" key={option.id} block onClick={() => onRespond({ kind: 'option', optionId: option.id })}>
+        <span className="prompt-option-content">
+          <strong>{option.label}</strong>
+          {option.description && <small>{option.description}</small>}
+        </span>
+      </Button>)}
       {prompt.allowFreeText && <Space.Compact block><Input value={text} aria-label="自定义回答" placeholder="输入回答" onChange={(event) => setText(event.target.value)} /><Button type="primary" disabled={!text.trim()} onClick={() => onRespond({ kind: 'text', text })}>提交</Button></Space.Compact>}
       <Button type="text" onClick={() => onRespond({ kind: 'cancel' })}>取消</Button>
     </Space>
@@ -385,4 +488,8 @@ function formatDuration(durationMs?: number, status?: ToolActivity['status']): s
 
 function toolStatusLabel(status: ToolActivity['status']): string {
   return { running: '运行中', done: '已完成', error: '失败', interrupted: '已中断' }[status]
+}
+
+function formatTokens(value: number): string {
+  return new Intl.NumberFormat('zh-CN').format(value)
 }

@@ -1,0 +1,12 @@
+.draw-summary { display: flex; align-items: center; justify-content: center; gap: 24px; margin: 10px 0 18px; }
+.draw-summary p { margin: 5px 0 0; color: var(--muted); font-size: 13px; }
+.ball { width: 72px; height: 72px; display: grid; place-content: center; border: 2px solid var(--accent); border-radius: 50%; background: var(--surface); text-align: center; }
+.ball strong { color: var(--accent); font-size: 13px; }
+.ball span { font-size: 24px; font-weight: 700; line-height: 1; }
+.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--line); gap: 1px; }
+.heading, .cell { min-width: 0; aspect-ratio: 1; display: grid; place-items: center; background: var(--surface); font-weight: 650; }
+.heading { aspect-ratio: auto; min-height: 34px; color: var(--accent); }
+.cell { font-variant-numeric: tabular-nums; }
+.cell.marked { background: var(--surface-2); color: var(--accent); }
+.cell.winner { background: var(--accent); color: #fff; }
+.draw { width: 100%; min-height: 44px; margin-top: 16px; font-weight: 650; }

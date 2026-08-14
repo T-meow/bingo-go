@@ -1,0 +1,47 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  font-synthesis: none;
+  --bg: #f4f5f6;
+  --surface: #ffffff;
+  --surface-2: #eceff1;
+  --text: #202428;
+  --muted: #697078;
+  --line: #d8dde1;
+  --accent: #19765c;
+  --accent-strong: #105845;
+  --danger: #b42318;
+  --warning: #a15c00;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #191b1e;
+    --surface: #24272b;
+    --surface-2: #30343a;
+    --text: #f3f4f5;
+    --muted: #aeb4ba;
+    --line: #444a50;
+    --accent: #55c6a2;
+    --accent-strong: #7bd7ba;
+    --danger: #ff7b72;
+    --warning: #ffbc66;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-width: 280px; min-height: 100%; background: var(--bg); color: var(--text); }
+button, select { font: inherit; }
+button { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 6px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { cursor: default; opacity: .48; }
+.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+@media (prefers-color-scheme: dark) { .primary { color: #10221c; } }
+.app { width: min(100%, 620px); margin: 0 auto; padding: 18px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.topbar h1 { margin: 0; font-size: 19px; letter-spacing: 0; }
+.topbar p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.toolbar button, .toolbar select { min-height: 34px; padding: 6px 11px; }
+.status { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 13px; }

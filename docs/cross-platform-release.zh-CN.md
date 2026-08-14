@@ -1,40 +1,79 @@
-# Bingo Go 跨平台自动发行方案
+# Bingo Go 跨平台发行
 
-## 目标
+## 产物范围
 
-每次推送 `main` 后，在 GitHub 托管的原生 runner 上构建可下载的 Windows、macOS 和 Linux x64 包；推送版本标签时，在三平台全部通过后创建 GitHub Release。发行包必须携带同平台的 Bingo v0.4.0 protocol v1 运行时并完成真实探针。
+GitHub Actions 在原生 runner 上构建 x64 产物：
 
-## 范围与非目标
+- Windows：NSIS `.exe`
+- macOS Intel：DMG 与 ZIP
+- Linux：AppImage 与 DEB
 
-- Windows 生成 NSIS 安装器，macOS 生成 DMG 和 ZIP，Linux 生成 AppImage 和 DEB。
-- PR 只运行 TypeScript 类型检查、Vitest 和生产 bundle 构建，不生成发行包。
-- `main`、`workflow_dispatch` 和 `v*` 标签运行三平台打包；普通产物保留 14 天。
-- 本阶段只提供 x64、未签名产物，不配置 Windows 证书、Apple Developer ID、notarization、自动更新或 ARM64。
+Pull Request 只运行类型检查、测试、生产 bundle 和 Team v2 协议测试。`main`、`workflow_dispatch` 与 `v*` 标签运行三平台打包；标签版本与 `package.json` 一致时才发布 GitHub Release。
 
-## 实现边界
+当前产物未进行 Windows code signing、Apple Developer ID 签名或 notarization，也不提供 ARM64 和自动更新。
 
-1. Workflow 固定检出 Bingo 官方 `v0.4.0` commit `129cb528714865041db2202aad38e1e0d59d7eee`。
-2. 应用 [`../vendor/bingo/v0.4.0-protocol-v1.patch`](../vendor/bingo/v0.4.0-protocol-v1.patch)，运行 `cargo build --locked --release`，不依赖开发机工作树或远端移动分支。
-3. `scripts/prepare-bingo-package.mjs` 要求版本严格为 `bingo 0.4.0`，protocol 为 v1，并验证三个必需 capability 和复制前后 SHA-256。
-4. electron-builder 仅打包当前 runner 的 `resources/bin/<platform>-<arch>/`；运行时按 Electron 的实际平台和架构定位该文件。
-5. 打包后再次从解包应用资源中执行 Bingo 探针，并检查平台要求的所有发行格式。
-6. 产物附带每个平台独立的 SHA-256 清单。只有 `vX.Y.Z` 与 `package.json` 版本一致时才允许创建 Release。
+## 可重复的 Bingo 运行时
 
-## 安全与兼容性
+CI 不读取开发机工作树，也不跟随移动分支：
 
-- 官方 GitHub Actions 使用完整 commit SHA 固定，并在注释中记录版本。
-- 默认 workflow 权限为 `contents: read`；只有标签发布 job 使用 `contents: write`。
-- 未配置任何长期 secret。未来加入签名时，应把凭据限制在受保护环境，并单独评审 fork PR、日志和产物泄漏风险。
-- protocol patch 和基线 commit 必须作为一个整体升级。同步新 Bingo 稳定版时，先在临时检出中完成 Rust 全量验证，再更新仓库补丁。
+1. 检出固定 Bingo commit `9ed235c393045a48b9dcdad108dfc0fa53a6890a`，对应 Cargo 版本 `v0.4.0`。
+2. 应用 `vendor/bingo/v0.4.0-protocol-v1.patch`。
+3. 使用 `cargo build --locked --release` 在目标 runner 构建原生二进制。
+4. 验证 `bingo 0.4.0`、wire protocol v1 和完整必需 capability。
+5. 将二进制复制到 `resources/bin/<platform>-<arch>/`，校验复制前后 SHA-256。
+6. electron-builder 只打包当前平台的运行时。
+7. 从最终解包应用中再次执行探针和文件校验。
 
-## 验证计划
+必需 capability 由 `scripts/bingo-package-lib.mjs` 统一定义，包括设置检查、工作区、附件、上下文和完整 Team v2 能力。
 
-- 本地：`npm run typecheck`、`npm test`、`npm run build`、patch apply/check 和 Windows 原生解包验证。
-- Actions：三个 package job 都要通过 Bingo release build、源码差异检查、运行时准备、Electron 打包、随包探针和 SHA-256 生成。
-- `main` 推送后检查三个 Actions artifact；正式版本再用匹配版本标签验证 Release job。
+## 本地打包
 
-## 假设
+默认要求 Bingo 与 Bingo Go 位于同一父目录。命令会构建相邻 `../bingo` 的当前工作树，因此发布前必须先检查其分支和修改状态。
 
-- GitHub 托管 runner 继续提供 Rust stable、Node.js 24 所需系统能力和对应 x64 原生环境。
-- macOS Intel 包可在 Intel Mac 直接运行；Apple Silicon 用户需使用 Rosetta。ARM64 原生发行属于后续扩展。
-- 用户接受首版未签名包可能触发 SmartScreen、Gatekeeper 或发行版安全提示。
+```bash
+npm run package:win
+npm run package:mac
+npm run package:linux
+```
+
+Windows unpacked 测试包：
+
+```powershell
+npm run package:win:unpacked
+npm run smoke:package:games
+```
+
+本地发行物只写入 `release/`。每次打包前，allowlist reset 脚本删除已知 electron-builder 产物；若存在未知文件或目录则停止，避免误删用户内容。不会创建 `.package-archive` 或根目录 `release-*`。
+
+## 自动校验
+
+`npm run verify:package` 校验：
+
+- 包内主程序、Bingo runtime 和 `app.asar` 均存在。
+- Bingo 版本、wire protocol 和 capability 完整。
+- Windows/Linux 只包含 `zh-CN` 与 `en-US` locale。
+- ASAR 只包含允许的 main/preload 生产依赖。
+- 内置游戏恰好为三款，单包和总量符合门槛。
+- unpacked、ASAR、运行时和主程序 SHA-256 与体积数据可输出审计。
+- 对正式打包命令，目标平台发行格式存在。
+
+`smoke:package:games` 使用独立临时 `userData` 启动真实 packaged app，验证游戏启动、单窗口切换、禁用关闭、续局、定向清除、网络限制与存储隔离。
+
+## GitHub Actions 安全边界
+
+- 第三方 Action 固定到完整 commit SHA。
+- 默认 workflow 权限是 `contents: read`；仅标签发布 job 使用 `contents: write`。
+- 当前不保存长期签名 secret。
+- 普通构建产物保留 14 天；Release 只接收验证后的原生包与 SHA-256 清单。
+- Bingo 基线 commit 与协议补丁必须一起升级并重新验证。
+
+## 发布检查
+
+1. 更新并提交 `package.json` 与 lockfile 版本。
+2. 在目标平台运行类型检查、测试、构建和本地包验证。
+3. 确认 vendor patch 能干净应用到固定 commit。
+4. 确认许可证与 `THIRD_PARTY_NOTICES` 准确。
+5. 推送 `vX.Y.Z` 标签，并确认三平台 package job 全部通过。
+6. 核对 GitHub Release 文件名、SHA-256 清单和未签名提示。
+
+Apple Silicon 目前通过 Rosetta 运行 Intel 包；原生 ARM64、签名与 notarization 需要独立评审后再加入。

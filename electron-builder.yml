@@ -2,6 +2,9 @@ appId: io.github.tmeow.bingogo
 productName: Bingo Go
 asar: true
 npmRebuild: false
+electronLanguages:
+  - zh-CN
+  - en-US
 electronDist: node_modules/electron/dist
 directories:
   output: release
@@ -12,6 +15,8 @@ files:
 extraResources:
   - from: resources/bin
     to: bin
+  - from: games/build
+    to: game-packs
   - from: build/icon.png
     to: icon.png
   - from: LICENSE

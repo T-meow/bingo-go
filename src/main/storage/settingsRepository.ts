@@ -72,7 +72,7 @@ export class SettingsRepository {
     }
   }
 
-  async saveRuntime(patch: Pick<EditableSettings, 'provider' | 'model' | 'thinkingLevel'>): Promise<void> {
+  async saveRuntime(patch: Pick<EditableSettings, 'provider' | 'model' | 'thinkingLevel' | 'permissionMode'>): Promise<void> {
     await this.patchUser(undefined, patch, false)
   }
 

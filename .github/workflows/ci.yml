@@ -17,7 +17,7 @@ concurrency:
 
 env:
   BINGO_REPOSITORY: https://github.com/yexrob/bingo.git
-  BINGO_REVISION: 129cb528714865041db2202aad38e1e0d59d7eee
+  BINGO_REVISION: 9ed235c393045a48b9dcdad108dfc0fa53a6890a
 
 jobs:
   quality:
@@ -39,6 +39,16 @@ jobs:
         run: npm test
       - name: Build application bundles
         run: npm run build
+      - name: Prepare pinned Bingo Team v2 source
+        shell: bash
+        run: |
+          git clone --filter=blob:none "$BINGO_REPOSITORY" ../bingo
+          git -C ../bingo checkout --detach "$BINGO_REVISION"
+          test "$(git -C ../bingo rev-parse HEAD)" = "$BINGO_REVISION"
+          git -C ../bingo apply --check "$GITHUB_WORKSPACE/vendor/bingo/v0.4.0-protocol-v1.patch"
+          git -C ../bingo apply "$GITHUB_WORKSPACE/vendor/bingo/v0.4.0-protocol-v1.patch"
+      - name: Validate Team v2 save protocol
+        run: cargo test --manifest-path ../bingo/Cargo.toml --locked team_v2_starter_blueprint_save_command_is_accepted
 
   package:
     name: Package ${{ matrix.label }}

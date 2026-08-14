@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "kind": "game",
+  "id": "io.github.tmeow.bingogo.sudoku",
+  "name": "数独",
+  "version": "1.0.0",
+  "entry": "index.html",
+  "description": "带笔记、冲突提示与撤销的经典数独",
+  "author": "Bingo Go",
+  "window": {
+    "width": 500,
+    "height": 760,
+    "minWidth": 390,
+    "minHeight": 650,
+    "resizable": true
+  }
+}

@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>贪吃蛇</title>
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar"><div><h1>贪吃蛇</h1><p id="status">准备</p></div><div class="score"><strong id="score">0</strong><span>最高 <b id="high-score">0</b></span></div></header>
+      <div class="toolbar"><label class="select-label">速度 <select id="speed"><option value="slow">慢</option><option value="normal">标准</option><option value="fast">快</option></select></label><button id="pause" type="button">开始</button><button id="restart" class="primary" type="button">重新开始</button></div>
+      <div class="canvas-wrap"><canvas id="game" width="400" height="400" aria-label="贪吃蛇棋盘"></canvas><button id="overlay" class="overlay visible" type="button">开始</button></div>
+      <section class="dpad" aria-label="方向控制"><button type="button" data-direction="up" aria-label="向上">↑</button><button type="button" data-direction="left" aria-label="向左">←</button><button type="button" data-direction="down" aria-label="向下">↓</button><button type="button" data-direction="right" aria-label="向右">→</button></section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
