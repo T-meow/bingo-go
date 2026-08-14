@@ -184,7 +184,7 @@ resources/bin/        prepared Bingo runtime
 release/              current package only
 ```
 
-本地只保留一份当前 release。`scripts/reset-package-output.mjs` 只允许删除 electron-builder 的已知目录和文件；遇到未知内容立即停止。Windows unpacked 的规范路径是 `release/win-unpacked`。
+本地只保留一份当前 release。`scripts/reset-package-output.mjs` 只允许删除 electron-builder 的已知目录和文件；遇到未知内容立即停止。Windows unpacked 的规范路径是 `release/win-unpacked`，每次测试打包可直接清理并覆盖。
 
 `scripts/verify-packaged-runtime.mjs` 从最终包中重新执行 Bingo 探针，并验证运行时 SHA-256、ASAR 生产依赖、locale、三款游戏和体积门槛。
 
@@ -214,9 +214,9 @@ webPreferences: {
 ```bash
 npm run typecheck
 npm test
-npm run build
 npm run package:win:unpacked
-npm run smoke:package:games
 ```
+
+游戏相关代码变更、大版本更新或明确要求游戏专项验证时，再追加 `npm run build:games` 和 `npm run smoke:package:games`。
 
 跨平台发行、上游同步和体积门槛分别见同目录下的保留文档。
