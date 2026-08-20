@@ -59,6 +59,12 @@ function renderType(schema, from = 'root', depth = 0) {
 
 function renderDefinition(name, schema) {
   if (schema.type === 'object' && schema.properties) {
+    const branches = schema.oneOf ?? schema.anyOf
+    if (Array.isArray(branches) && branches.length > 0) {
+      const common = renderType({ ...schema, oneOf: undefined, anyOf: undefined }, name)
+      const variants = branches.map((branch, index) => renderType(branch, `${name}.variant${index}`)).join(' | ')
+      return `export type ${name} = ${common} & (${variants})`
+    }
     const props = schema.properties ?? {}
     const required = new Set(Array.isArray(schema.required) ? schema.required : [])
     const entries = Object.entries(props).map(([key, value]) => {

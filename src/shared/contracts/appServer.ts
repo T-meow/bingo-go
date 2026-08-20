@@ -537,13 +537,7 @@ export interface InteractionRespondResult {
 }
 
 // Item
-export interface Item {
-  completedAt?: number | null
-  id: ItemId
-  startedAt?: number | null
-  status: ItemStatus
-  turnId?: TurnId | null
-}
+export type Item = { completedAt?: number | null; id: ItemId; startedAt?: number | null; status: ItemStatus; turnId?: TurnId | null } & ({ attachments: Array<AssetId>; text: string; type: "userMessage" } | { text: string; type: "assistantMessage" } | { deliveryId?: DeliveryId | null; from: string; text: string; to?: string | null; type: "peerMessage" } | { from: string; mentions: Array<string>; roomId: RoomId; roomSeq: number; text: string; type: "roomMessage" } | { text: string; type: "reasoning" } | { artifact?: AssetId | null; diff?: string | null; durationMs: number; input: unknown; name: string; output: string; summary: string; toolCallId: string; type: "toolCall" } | { artifact?: AssetId | null; background: boolean; command: string; commandId?: CommandId | null; dialect: ShellDialect; durationMs: number; exitCode?: number | null; output: string; tail?: CommandTail | null; type: "command" } | { afterTokens: number; beforeTokens: number; durationMs: number; replacedMessages: number; type: "compaction" } | { mode: RewindMode; removedItems: number; targetItemId?: ItemId | null; type: "rewind" } | { marker: string; type: "interruption" } | { code: string; level: NoticeLevel; text: string; type: "notice" } | { answer: string; interactionId: InteractionId; optionId?: string | null; question: string; type: "questionAnswer" } | { decision: PermissionDecisionKind; feedback?: string | null; interactionId: InteractionId; scopeId?: ScopeId | null; tool: string; type: "permissionReceipt" } | { assetId: AssetId; label?: string | null; type: "asset" })
 
 // ItemCursor
 export interface ItemCursor {
