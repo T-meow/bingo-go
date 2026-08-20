@@ -17,7 +17,7 @@ concurrency:
 
 env:
   BINGO_REPOSITORY: https://github.com/yexrob/bingo.git
-  BINGO_REVISION: 9ed235c393045a48b9dcdad108dfc0fa53a6890a
+  BINGO_REVISION: 7bee209d191c41b62b8b9e135bf5124f581e7505
 
 jobs:
   quality:
@@ -39,16 +39,15 @@ jobs:
         run: npm test
       - name: Build application bundles
         run: npm run build
-      - name: Prepare pinned Bingo Team v2 source
+      - name: Prepare pinned upstream Bingo source
         shell: bash
         run: |
           git clone --filter=blob:none "$BINGO_REPOSITORY" ../bingo
           git -C ../bingo checkout --detach "$BINGO_REVISION"
           test "$(git -C ../bingo rev-parse HEAD)" = "$BINGO_REVISION"
-          git -C ../bingo apply --check "$GITHUB_WORKSPACE/vendor/bingo/v0.4.0-protocol-v1.patch"
-          git -C ../bingo apply "$GITHUB_WORKSPACE/vendor/bingo/v0.4.0-protocol-v1.patch"
-      - name: Validate Team v2 save protocol
-        run: cargo test --manifest-path ../bingo/Cargo.toml --locked team_v2_starter_blueprint_save_command_is_accepted
+          git -C ../bingo diff --check
+      - name: Validate app-server protocol contract
+        run: cargo test --manifest-path ../bingo/Cargo.toml --locked app_server
 
   package:
     name: Package ${{ matrix.label }}
@@ -83,17 +82,21 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Prepare Bingo v0.4.0 protocol v1 source
+      - name: Prepare upstream Bingo v0.4.1 source
         shell: bash
         run: |
           git clone --filter=blob:none "$BINGO_REPOSITORY" ../bingo
           git -C ../bingo checkout --detach "$BINGO_REVISION"
           test "$(git -C ../bingo rev-parse HEAD)" = "$BINGO_REVISION"
-          git -C ../bingo apply --check "$GITHUB_WORKSPACE/vendor/bingo/v0.4.0-protocol-v1.patch"
-          git -C ../bingo apply "$GITHUB_WORKSPACE/vendor/bingo/v0.4.0-protocol-v1.patch"
           git -C ../bingo diff --check
       - name: Build native Bingo runtime
         run: cargo build --manifest-path ../bingo/Cargo.toml --locked --release
+      - name: Verify app-server schema bundle is not stale
+        shell: bash
+        run: |
+          BINGO_BIN="../bingo/target/release/bingo"
+          test -x "$BINGO_BIN.exe" && BINGO_BIN="$BINGO_BIN.exe"
+          node scripts/verify-app-server-schema.mjs "$BINGO_BIN"
       - name: Build Bingo Go
         run: npm run build
       - name: Prepare and probe native runtime

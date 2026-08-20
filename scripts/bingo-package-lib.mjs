@@ -1,20 +1,9 @@
 import { createHash } from 'node:crypto'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 
-export const BINGO_VERSION = 'bingo 0.4.0'
-export const REQUIRED_CAPABILITIES = [
-  'settings.inspect.v1',
-  'team.workspace.v1',
-  'team.tasks.v1',
-  'team.blueprint.v2',
-  'team.lobby.v1',
-  'team.presets.v1',
-  'team.member.profile.v1',
-  'attachments.input.v1',
-  'session.workspace.v1',
-  'session.context.v1'
-]
+export const BINGO_VERSION = 'bingo 0.4.1'
+export const REQUIRED_SERVER_CAPABILITIES = ['images', 'multiConversation', 'reasoning', 'rooms', 'shell', 'teams']
 
 export function inspectBingo(binaryPath) {
   const version = execFileSync(binaryPath, ['--version'], {
@@ -25,23 +14,48 @@ export function inspectBingo(binaryPath) {
     throw new Error(`Expected ${BINGO_VERSION}, received ${version || '<empty>'}.`)
   }
 
-  const output = execFileSync(binaryPath, ['--json-events', '--probe'], {
+  const input = [
+    JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {
+      protocol: { major: 1, minMinor: 0, maxMinor: 0 },
+      client: { name: 'bingo-go-verify', version: '0.1.0' },
+      capabilities: { interactionResponse: true }
+    } }),
+    JSON.stringify({ jsonrpc: '2.0', method: 'initialized', params: {} }),
+    JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'shutdown', params: {} })
+  ].join('\n') + '\n'
+
+  const probe = spawnSync(binaryPath, ['app-server'], {
+    input,
     encoding: 'utf8',
-    windowsHide: true
-  }).trim()
-  const lines = output.split(/\r?\n/).filter(Boolean)
-  if (lines.length !== 1) {
-    throw new Error('Bingo protocol probe must emit exactly one NDJSON record.')
+    windowsHide: true,
+    timeout: 30_000,
+    maxBuffer: 8 * 1024 * 1024
+  })
+  if (probe.status !== 0) {
+    throw new Error(`bingo app-server exited ${probe.status}: ${probe.stderr || probe.stdout || '<no output>'}`)
   }
-
-  const probe = JSON.parse(lines[0])
-  const capabilities = probe.metadata?.capabilities ?? probe.capabilities ?? []
-  const missing = REQUIRED_CAPABILITIES.filter((capability) => !capabilities.includes(capability))
-  if (probe.protocolVersion !== 1 || probe.type !== 'protocol.ready' || missing.length > 0) {
-    throw new Error(`Bingo does not expose the required protocol v1 capabilities. Missing: ${missing.join(', ') || '<protocol>'}.`)
+  const lines = probe.stdout.split(/\r?\n/).filter(Boolean)
+  const initializeResponse = lines.find((line) => {
+    try { return JSON.parse(line).id === 1 } catch { return false }
+  })
+  if (!initializeResponse) {
+    throw new Error('Bingo app-server probe did not emit an initialize response.')
   }
-
-  return { version, protocolVersion: probe.protocolVersion, capabilities }
+  const initialized = JSON.parse(initializeResponse)
+  if (initialized.jsonrpc !== '2.0' || !initialized.result?.server?.version || !initialized.result?.protocol || !initialized.result?.limits || !initialized.result?.capabilities) {
+    throw new Error('Bingo app-server probe returned an invalid initialize result.')
+  }
+  const capabilities = initialized.result.capabilities
+  const missing = REQUIRED_SERVER_CAPABILITIES.filter((capability) => capabilities[capability] !== true)
+  if (missing.length > 0) {
+    throw new Error(`Bingo does not expose required app-server capabilities. Missing: ${missing.join(', ')}.`)
+  }
+  return {
+    version,
+    protocol: initialized.result.protocol,
+    serverCapabilities: capabilities,
+    limits: initialized.result.limits
+  }
 }
 
 export async function sha256File(path) {

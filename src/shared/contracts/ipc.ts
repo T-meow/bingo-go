@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { agentDefinitionInputSchema, behaviorConstraintSchema, promptIdSchema, sessionForkReasonSchema, teamDefinitionSchema, teamPresetModelMappingSchema, type AgentDefinitionDocument, type AgentDefinitionInput, type BehaviorConstraint, type CliEvent, type CliSessionMetadata, type ContextUsage, type PromptResponse, type SessionForkReason, type TeamDefinition, type TeamLobby, type TeamPresetModelMapping, type TeamPresetPreview, type TeamSnapshot, type TeamTask, type TeamTaskSummary } from './cli'
 import { conversationTitleLength, MAX_CONVERSATION_TITLE_LENGTH } from '../conversationTitle'
 import type { GamePackChoice, GamePackEvent, GamePackSnapshot } from './gamePacks'
+import type { FrameLimits, ProtocolVersion, ServerCapabilities } from './appServer'
 export * from './gamePacks'
 
 export const IPC = {
@@ -34,7 +35,7 @@ export const IPC = {
 export type GuiError = { code: string; msg: string; level: 'field' | 'page' | 'flow'; recoverable: boolean; action?: 'retry' }
 export type Result<T> = { ok: true; value: T } | { ok: false; error: GuiError }
 export type AppInfo = { appVersion: string; platform: NodeJS.Platform; arch: string; packaged: boolean }
-export type RuntimeInfo = { binaryPath: string; bingoVersion: string; protocolVersion: 1; workspacePath: string; capabilities?: string[] }
+export type RuntimeInfo = { binaryPath: string; bingoVersion: string; protocolVersion: 1; workspacePath: string; capabilities?: string[]; appServer?: { protocol: ProtocolVersion; capabilities: ServerCapabilities; limits: FrameLimits } }
 export type WorkspacePreferencesV2 = { schemaVersion: 2; currentPath: string; recentPaths: string[] }
 export type WorkspaceSelectionResult =
   | { canceled: true; preferences: WorkspacePreferencesV2 }
