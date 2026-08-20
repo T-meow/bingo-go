@@ -113,10 +113,10 @@ export function McpSettings({ snapshot, error, busy, onTransactionChange, onUpse
   }
 
   return <SettingsSectionLayout title="MCP" description="配置 Bingo 使用的 stdio 与 Streamable HTTP 工具服务器。" extra={<Button type="primary" icon={<PlusOutlined />} disabled={busy} onClick={() => setEditing('new')}>添加服务器</Button>}>
-    {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
+    {error && <Alert type="error" showIcon title={error.code} description={error.msg} />}
     {servers.length === 0 ? <Empty description="尚未配置 MCP 服务器" /> : <Table rowKey="name" size="middle" pagination={false} columns={columns} dataSource={servers} />}
     <Drawer title={editing === 'new' ? '添加 MCP 服务器' : `编辑 ${current?.name ?? ''}`} size={500} open={Boolean(editing)} maskClosable={!saving} closable={!saving} onClose={closeEditor} extra={<Space>{current?.editable && <Button danger icon={<DeleteOutlined />} onClick={remove}>删除</Button>}<Button type="primary" loading={saving} disabled={!valid(form) || Boolean(current && !current.editable)} onClick={() => void save()}>保存</Button></Space>}>
-      {current && !current.editable && <Alert type="warning" showIcon message="工作区层的 MCP 配置只能查看。" />}
+      {current && !current.editable && <Alert type="warning" showIcon title="工作区层的 MCP 配置只能查看。" />}
       <Form layout="vertical" className="drawer-form">
         <Form.Item label="名称" required><Input value={form.name} disabled={editing !== 'new'} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Item>
         <Form.Item label="传输类型"><Select value={form.type} disabled={Boolean(current && !current.editable)} options={[{ value: 'stdio', label: 'stdio' }, { value: 'http', label: 'Streamable HTTP' }]} onChange={(type) => setForm({ ...form, type })} /></Form.Item>
@@ -135,7 +135,7 @@ export function McpSettings({ snapshot, error, busy, onTransactionChange, onUpse
 }
 
 function SecretEditor({ label, existing, text, cleared, disabled, onText, onClear }: { label: string; existing: string[]; text: string; cleared: string[]; disabled: boolean; onText: (value: string) => void; onClear: (keys: string[]) => void }): React.JSX.Element {
-  return <Form.Item label={label} extra="新值使用 KEY=value，每行一项；现有值不会显示。"><Space direction="vertical" className="secret-editor">{existing.length > 0 && <><div className="secret-tags">{existing.map((key) => <Tag key={key}>{key}</Tag>)}</div><Select mode="multiple" value={cleared} disabled={disabled} placeholder="选择要清除的已有字段" options={existing.map((key) => ({ value: key, label: key }))} onChange={onClear} /></>}<Input.TextArea value={text} rows={4} disabled={disabled} autoComplete="off" placeholder="TOKEN=新的值" onChange={(event) => onText(event.target.value)} /></Space></Form.Item>
+  return <Form.Item label={label} extra="新值使用 KEY=value，每行一项；现有值不会显示。"><Space orientation="vertical" className="secret-editor">{existing.length > 0 && <><div className="secret-tags">{existing.map((key) => <Tag key={key}>{key}</Tag>)}</div><Select mode="multiple" value={cleared} disabled={disabled} placeholder="选择要清除的已有字段" options={existing.map((key) => ({ value: key, label: key }))} onChange={onClear} /></>}<Input.TextArea value={text} rows={4} disabled={disabled} autoComplete="off" placeholder="TOKEN=新的值" onChange={(event) => onText(event.target.value)} /></Space></Form.Item>
 }
 
 function toInput(form: McpForm, current: McpServerView | null): McpServerSettingsInput {

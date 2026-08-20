@@ -67,7 +67,7 @@ npm run smoke:package:games
 
 `npm run verify:package` 必须确认：
 
-- 包内 Bingo 版本为 `bingo 0.4.0`，wire protocol 为 v1，必需 capability 完整。
+- 包内 Bingo 版本为 `bingo 0.4.1`，app-server 协议为 `1.0`，必需 capability 完整。
 - 主程序、Bingo runtime 和 ASAR 的 SHA-256 可计算并输出。
 - ASAR 不含 React、Ant Design 等 renderer-only 依赖。
 - locale 集合精确匹配白名单。

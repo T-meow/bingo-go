@@ -14,7 +14,7 @@ Rei 更新应在 Bingo Go 仓库外的临时检出中获取和审阅：
 1. 记录上次与本次参考的完整 commit SHA。
 2. 比较行为、依赖、测试和安全边界。
 3. 只移植明确需要的改动，以 Bingo Go 普通提交保留来源说明。
-4. 保持 Bingo Go 品牌、protocol v1、工作区、Team v2、附件、游戏隔离和打包规则。
+4. 保持 Bingo Go 品牌、工作区、官方 app-server 契约、协作视图、附件、游戏隔离和打包规则。
 5. 不使用 `--allow-unrelated-histories`，不把临时 clone 或 remote-tracking refs 带回仓库。
 6. 完成类型检查、测试和生产构建。
 
@@ -27,7 +27,7 @@ Rei 更新应在 Bingo Go 仓库外的临时检出中获取和审阅：
 - Wire protocol：`bingo app-server`（JSON-RPC 2.0 / NDJSON / stdio，protocol 1.0）
 - Schema 副本：`vendor/bingo/app-server-schema/v1.0/`
 
-不再维护 protocol v1 补丁。升级 Bingo 基线时：
+不维护旧自定义 NDJSON 补丁。升级 Bingo 基线时：
 
 1. 在独立临时检出中切换到目标稳定 tag 或完整 SHA。
 2. 对比新 commit 的 `schema/app-server/` 与本地 schema 副本。

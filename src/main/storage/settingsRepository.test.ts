@@ -8,8 +8,7 @@ const editable = {
   apiBaseUrl: 'https://user.test', provider: 'opencode-go', model: 'gpt-5.6-luna', thinkingLevel: 'high' as const,
   permissionMode: 'default' as const, theme: 'dark' as const, motion: 'auto' as const, sendImages: false,
   cacheControl: false, respondToBashCommands: true, shell: '',
-  permissions: { allow: [], ask: [], deny: [] }, team: { autoStart: true },
-  experimental: { agentChannels: false, channelMessageLimit: 500, agentMessageLimit: 50 },
+  permissions: { allow: [], ask: [], deny: [] },
   share: { baseUrl: 'https://bingo.ruobin.dev' }
 }
 

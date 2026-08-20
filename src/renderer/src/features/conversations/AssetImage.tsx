@@ -37,7 +37,7 @@ export function AssetImage({ assetId, mime, bytes, label, loadChunk }: {
     return () => { cancelled = true }
   }, [assetId, bytes, loadChunk, mime])
 
-  if (error) return <Alert type="error" showIcon message={`无法读取图片 ${label ?? assetId}`} description={error} />
+  if (error) return <Alert type="error" showIcon title={`无法读取图片 ${label ?? assetId}`} description={error} />
   if (!dataUrl) return <Skeleton.Image active />
   return <img className="asset-image" src={dataUrl} alt={label ?? assetId} />
 }

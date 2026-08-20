@@ -99,8 +99,8 @@ export function GamePackSettings(): React.JSX.Element {
   const relationTone = preview?.relation === 'downgrade' ? 'error' : preview?.relation === 'same' ? 'warning' : 'info'
   return <>
     <SettingsSectionLayout title="小游戏" description="管理内置游戏和本地导入的 HTML5 游戏包。" extra={<Space><Button icon={<ReloadOutlined />} disabled={loading || Boolean(operation)} onClick={() => void load()}>刷新</Button><Button type="primary" icon={<DownloadOutlined />} aria-label="导入游戏包" loading={operation === 'choose'} onClick={() => void choose()}>导入游戏包</Button></Space>}>
-      {error && <Alert type="error" showIcon message="小游戏目录不可用" description={error} action={<Button onClick={() => void load()}>重试</Button>} />}
-      {snapshot?.warnings.map((warning) => <Alert key={warning} type="warning" showIcon message="已隔离损坏的游戏包" description={warning} />)}
+      {error && <Alert type="error" showIcon title="小游戏目录不可用" description={error} action={<Button onClick={() => void load()}>重试</Button>} />}
+      {snapshot?.warnings.map((warning) => <Alert key={warning} type="warning" showIcon title="已隔离损坏的游戏包" description={warning} />)}
       {loading && !snapshot
         ? <Skeleton active paragraph={{ rows: 8 }} />
         : <List className="game-pack-settings-list" dataSource={snapshot?.items ?? []} locale={{ emptyText: '没有可用的小游戏' }} renderItem={(item) => <List.Item actions={[
@@ -118,9 +118,9 @@ export function GamePackSettings(): React.JSX.Element {
     </SettingsSectionLayout>
 
     <Modal open={Boolean(preview)} title="确认导入小游戏包" okText={preview?.relation === 'new' ? '安装并启用' : '替换并启用'} cancelText="取消" confirmLoading={operation === 'install'} mask={{ closable: false }} okButtonProps={{ danger: preview?.relation === 'downgrade' }} onOk={() => void install()} onCancel={() => setPreview(null)}>
-      {preview && <Space direction="vertical" size="middle" className="game-pack-confirm">
-        <Alert type="warning" showIcon message="此游戏包未签名" description="小游戏会在无 Node、无 IPC、无网络权限的独立窗口中运行。请仅安装你信任来源的本地包。" />
-        {preview.relation !== 'new' && <Alert type={relationTone} showIcon message={relationLabel(preview)} description={preview.relation === 'downgrade' ? '降级可能无法读取新版本存档；旧包仅在替换成功后才会退出使用。' : '旧包仅在新包完整校验并安装成功后才会退出使用。'} />}
+      {preview && <Space orientation="vertical" size="middle" className="game-pack-confirm">
+        <Alert type="warning" showIcon title="此游戏包未签名" description="小游戏会在无 Node、无 IPC、无网络权限的独立窗口中运行。请仅安装你信任来源的本地包。" />
+        {preview.relation !== 'new' && <Alert type={relationTone} showIcon title={relationLabel(preview)} description={preview.relation === 'downgrade' ? '降级可能无法读取新版本存档；旧包仅在替换成功后才会退出使用。' : '旧包仅在新包完整校验并安装成功后才会退出使用。'} />}
         <Descriptions size="small" column={1} items={[
           { key: 'name', label: '游戏', children: `${preview.manifest.name} ${preview.manifest.version}` },
           { key: 'id', label: 'ID', children: preview.manifest.id },

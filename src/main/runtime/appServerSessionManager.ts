@@ -28,7 +28,9 @@ import type {
   SessionStartResult,
   SessionDeleteParams,
   SessionDeleteResult,
-  SessionListResult
+  SessionListResult,
+  TurnInterruptParams,
+  TurnInterruptResult
 } from '../../shared/contracts/appServer'
 import { AppServerSession } from './appServerSession'
 import type { AppServerTransportExit } from './appServerTransport'
@@ -54,7 +56,7 @@ export class AppServerSessionManager {
   async start(workspacePath?: string): Promise<SessionSnapshot> {
     await this.close()
     const session = new AppServerSession(this.binaryPath, workspacePath ?? this.cwd, {
-      onNotification: (notification) => this.handlers.onNotification(notification),
+      onNotification: (notification) => this.handleNotification(notification),
       onDesync: (info) => {
         this.handlers.onDesync(info)
         void this.resynchronize().catch(() => undefined)
@@ -72,7 +74,7 @@ export class AppServerSessionManager {
   async resume(locator: SessionLocator): Promise<SessionSnapshot> {
     await this.close()
     const session = new AppServerSession(this.binaryPath, this.cwd, {
-      onNotification: (notification) => this.handlers.onNotification(notification),
+      onNotification: (notification) => this.handleNotification(notification),
       onDesync: (info) => {
         this.handlers.onDesync(info)
         void this.resynchronize().catch(() => undefined)
@@ -135,6 +137,10 @@ export class AppServerSessionManager {
     return this.requireSession().interactionRespond(params)
   }
 
+  async turnInterrupt(params: TurnInterruptParams): Promise<TurnInterruptResult> {
+    return this.requireSession().turnInterrupt(params)
+  }
+
   async actionList(): Promise<ActionListResult> {
     return this.requireSession().actionList({})
   }
@@ -166,7 +172,7 @@ export class AppServerSessionManager {
   async restartCurrent(): Promise<SessionSnapshot> {
     const locator = this.snapshot?.session.locator ?? null
     const workspace = this.snapshot?.session.cwd ?? this.cwd
-    await this.close()
+    await this.stopTransport()
     if (locator) return this.resume(locator)
     return this.start(workspace)
   }
@@ -179,7 +185,32 @@ export class AppServerSessionManager {
     const session = this.session
     this.session = null
     this.snapshot = null
-    await session?.shutdown()
+    if (!session) return
+    try {
+      await session.sessionClose({})
+      await session.shutdown()
+    } catch {
+      await session.close().catch(() => undefined)
+    }
+  }
+
+  private async stopTransport(): Promise<void> {
+    const session = this.session
+    this.session = null
+    this.snapshot = null
+    if (!session) return
+    try {
+      await session.shutdown()
+    } catch {
+      await session.close().catch(() => undefined)
+    }
+  }
+
+  private handleNotification(notification: AppServerNotification): void {
+    if (notification.method === 'session/updated' && this.snapshot) {
+      this.snapshot = { ...this.snapshot, session: notification.params.session }
+    }
+    this.handlers.onNotification(notification)
   }
 
   private requireSession(): AppServerSession {

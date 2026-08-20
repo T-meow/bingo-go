@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { RendererCliPayload } from '../../shared/contracts/ipc'
-import type { ManagedSessionEvent } from '../runtime/sessionManager'
+import type { AppServerNotification, SessionSnapshot, Turn } from '../../shared/contracts/appServer'
 import { DEFAULT_NOTIFICATION_PREFERENCES } from '../storage/notificationPreferencesRepository'
 import { NotificationCoordinator, type NotificationWindow, type SystemNotificationOptions } from './notificationCoordinator'
 
@@ -8,7 +7,6 @@ type WindowState = { visible: boolean; minimized: boolean; focused: boolean; des
 
 function fixture(state: Partial<WindowState> = {}, supported = true): {
   coordinator: NotificationCoordinator
-  state: WindowState
   notifications: Array<{ options: SystemNotificationOptions; click: () => void; show: () => void }>
   activate: ReturnType<typeof vi.fn>
   window: NotificationWindow
@@ -31,7 +29,11 @@ function fixture(state: Partial<WindowState> = {}, supported = true): {
     window,
     isSupported: () => supported,
     createNotification: (options) => {
-      const item: { options: SystemNotificationOptions; click: () => void; show: () => void } = { options, click: () => undefined, show: vi.fn((): void => undefined) }
+      const item: { options: SystemNotificationOptions; click: () => void; show: () => void } = {
+        options,
+        click: () => undefined,
+        show: vi.fn((): void => undefined)
+      }
       notifications.push(item)
       return {
         on: (_event, listener) => { item.click = listener },
@@ -42,97 +44,119 @@ function fixture(state: Partial<WindowState> = {}, supported = true): {
     now: () => now
   })
   coordinator.updatePreferences(DEFAULT_NOTIFICATION_PREFERENCES)
-  return { coordinator, state: current, notifications, activate, window, setNow: (value) => { now = value } }
+  return { coordinator, notifications, activate, window, setNow: (value) => { now = value } }
 }
 
-function event(payload: RendererCliPayload, connectionId = '123e4567-e89b-42d3-a456-426614174000'): ManagedSessionEvent {
-  return { connectionId, sessionId: 'session-1', displayName: 'Release check', sequence: 1, payload }
+function snapshot(id = 'sess_1'): SessionSnapshot {
+  return { session: { id, title: 'Release check', cwd: '/tmp' } } as SessionSnapshot
 }
 
-const turnId = '123e4567-e89b-42d3-a456-426614174001'
+const event = { seq: 1, sessionId: 'sess_1', ts: 1 }
+const turn = (status: Turn['status'] = 'running'): Turn => ({
+  id: 'turn_1', conversationId: 'conv_main', inputItemIds: [], origin: 'user', round: 0,
+  startedAt: 1, completedAt: status === 'running' ? null : 2, status, usage: null, error: status === 'failed' ? { code: 'SECRET', message: 'private detail' } : null
+})
+const notification = (value: Omit<AppServerNotification, 'jsonrpc'>): AppServerNotification => ({ jsonrpc: '2.0', ...value } as AppServerNotification)
 
 describe('NotificationCoordinator', () => {
   it.each([
     ['hidden', { visible: false }],
     ['minimized', { minimized: true }],
     ['unfocused', { focused: false }]
-  ])('notifies for a prompt while the window is %s', (_name, state) => {
+  ])('notifies for an interaction while the window is %s', (_name, state) => {
     const item = fixture(state)
-    item.coordinator.handle(event({ type: 'prompt.request', protocolVersion: 1, seq: 1, sessionId: 'session-1', turnId, promptId: '123e4567-e89b-42d3-a456-426614174002', kind: 'question', title: 'Question', question: 'Continue?', options: [], allowFreeText: true }))
+    item.coordinator.handle(snapshot(), notification({
+      method: 'interaction/opened',
+      params: {
+        event,
+        interaction: {
+          id: 'int_1', conversationId: 'conv_main', openedAt: 1, remainingGuardMs: 0,
+          prompt: { type: 'question', title: 'Question', question: 'Continue?', options: [], allowsFreeText: true }
+        }
+      }
+    }))
 
     expect(item.notifications).toHaveLength(1)
     expect(item.notifications[0].options).toEqual({ title: 'Bingo 等待你的处理', body: '“Release check”需要你的确认或回答。', silent: false })
   })
 
   it('suppresses foreground, disabled, category-disabled, and unsupported notifications', () => {
+    const failed = notification({ method: 'turn/completed', params: { event, conversationId: 'conv_main', turn: turn('failed') } })
     const foreground = fixture()
-    foreground.coordinator.handle(event({ type: 'prompt.request', protocolVersion: 1, seq: 1, sessionId: 'session-1', turnId, promptId: '123e4567-e89b-42d3-a456-426614174002', kind: 'question', title: 'Question', question: 'Continue?', options: [], allowFreeText: true }))
+    foreground.coordinator.handle(snapshot(), failed)
     expect(foreground.notifications).toHaveLength(0)
 
     const disabled = fixture({ focused: false })
     disabled.coordinator.updatePreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES, enabled: false })
-    disabled.coordinator.handle(event({ type: 'transport.error', error: { code: 'FAIL', msg: 'private detail', level: 'flow', recoverable: true }, exitCode: 1, signal: null }))
+    disabled.coordinator.handle(snapshot(), failed)
     expect(disabled.notifications).toHaveLength(0)
 
     const category = fixture({ focused: false })
     category.coordinator.updatePreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES, failures: false })
-    category.coordinator.handle(event({ type: 'transport.error', error: { code: 'FAIL', msg: 'private detail', level: 'flow', recoverable: true }, exitCode: 1, signal: null }))
+    category.coordinator.handle(snapshot(), failed)
     expect(category.notifications).toHaveLength(0)
 
     const unsupported = fixture({ focused: false }, false)
-    unsupported.coordinator.handle(event({ type: 'transport.error', error: { code: 'FAIL', msg: 'private detail', level: 'flow', recoverable: true }, exitCode: 1, signal: null }))
+    unsupported.coordinator.handle(snapshot(), failed)
     expect(unsupported.notifications).toHaveLength(0)
   })
 
-  it('notifies completion only at the ten-second boundary and clears cancelled turns', () => {
+  it('notifies completion only at the ten-second boundary and ignores interrupted turns', () => {
     const item = fixture({ focused: false })
-    const started = { type: 'turn.started' as const, protocolVersion: 1 as const, seq: 1, sessionId: 'session-1', commandId: '123e4567-e89b-42d3-a456-426614174003', turnId }
-    item.coordinator.handle(event(started))
+    const started = notification({ method: 'turn/started', params: { event, conversationId: 'conv_main', turn: turn() } })
+    item.coordinator.handle(snapshot(), started)
     item.setNow(9_999)
-    item.coordinator.handle(event({ type: 'turn.completed', protocolVersion: 1, seq: 2, sessionId: 'session-1', turnId }))
+    item.coordinator.handle(snapshot(), notification({ method: 'turn/completed', params: { event, conversationId: 'conv_main', turn: turn('completed') } }))
     expect(item.notifications).toHaveLength(0)
 
     item.setNow(20_000)
-    item.coordinator.handle(event(started))
+    item.coordinator.handle(snapshot(), started)
     item.setNow(30_000)
-    item.coordinator.handle(event({ type: 'turn.completed', protocolVersion: 1, seq: 2, sessionId: 'session-1', turnId }))
+    item.coordinator.handle(snapshot(), notification({ method: 'turn/completed', params: { event, conversationId: 'conv_main', turn: turn('completed') } }))
     expect(item.notifications).toHaveLength(1)
 
-    item.coordinator.handle(event(started))
-    item.coordinator.handle(event({ type: 'turn.cancelled', protocolVersion: 1, seq: 2, sessionId: 'session-1', turnId, reason: 'requested' }))
+    item.coordinator.handle(snapshot(), started)
     item.setNow(50_000)
-    item.coordinator.handle(event({ type: 'turn.completed', protocolVersion: 1, seq: 3, sessionId: 'session-1', turnId }))
+    item.coordinator.handle(snapshot(), notification({ method: 'turn/completed', params: { event, conversationId: 'conv_main', turn: turn('interrupted') } }))
     expect(item.notifications).toHaveLength(1)
   })
 
-  it('uses the sound preference and never includes runtime error details', () => {
+  it('uses sound preference and never includes runtime error details', () => {
     const item = fixture({ focused: false })
     item.coordinator.updatePreferences({ ...DEFAULT_NOTIFICATION_PREFERENCES, sound: false })
-    item.coordinator.handle(event({ type: 'error', protocolVersion: 1, seq: 1, sessionId: 'session-1', scope: 'turn', turnId, code: 'SECRET', msg: 'sensitive workspace detail', level: 'page', recoverable: true }))
+    item.coordinator.handle(snapshot(), notification({ method: 'turn/completed', params: { event, conversationId: 'conv_main', turn: turn('failed') } }))
 
     expect(item.notifications[0].options).toEqual({ title: '任务运行失败', body: '“Release check”需要返回 Bingo Go 查看。', silent: true })
-    expect(JSON.stringify(item.notifications[0].options)).not.toContain('sensitive')
+    expect(JSON.stringify(item.notifications[0].options)).not.toContain('private detail')
   })
 
-  it('deduplicates a session error followed by process exit and resets for a new connection', () => {
+  it('deduplicates repeated transport exits and resets for a new session', () => {
     const item = fixture({ focused: false })
-    item.coordinator.handle(event({ type: 'error', protocolVersion: 1, seq: 1, sessionId: 'session-1', scope: 'session', code: 'FAIL', msg: 'failed', level: 'flow', recoverable: true }))
-    item.coordinator.handle(event({ type: 'transport.error', error: { code: 'FAIL', msg: 'failed', level: 'flow', recoverable: true }, exitCode: 1, signal: null }))
+    item.coordinator.handleExit(snapshot(), new Error('private'))
+    item.coordinator.handleExit(snapshot(), new Error('private'))
     expect(item.notifications).toHaveLength(1)
 
-    item.coordinator.handle(event({ type: 'transport.error', error: { code: 'FAIL', msg: 'failed', level: 'flow', recoverable: true }, exitCode: 1, signal: null }, '123e4567-e89b-42d3-a456-426614174099'))
+    item.coordinator.handleExit(snapshot('sess_2'), new Error('private'))
     expect(item.notifications).toHaveLength(2)
   })
 
-  it('restores and focuses the window before emitting notification activation', () => {
+  it('restores and focuses the window before emitting activation', () => {
     const item = fixture({ visible: false, minimized: true, focused: false })
-    item.coordinator.handle(event({ type: 'prompt.request', protocolVersion: 1, seq: 1, sessionId: 'session-1', turnId, promptId: '123e4567-e89b-42d3-a456-426614174002', kind: 'question', title: 'Question', question: 'Continue?', options: [], allowFreeText: true }))
-
+    item.coordinator.handle(snapshot(), notification({
+      method: 'interaction/opened',
+      params: {
+        event,
+        interaction: {
+          id: 'int_1', conversationId: 'conv_main', openedAt: 1, remainingGuardMs: 0,
+          prompt: { type: 'confirmation', title: 'Confirm', detail: 'Continue?', confirmLabel: 'Continue' }
+        }
+      }
+    }))
     item.notifications[0].click()
 
     expect(item.window.restore).toHaveBeenCalledOnce()
     expect(item.window.show).toHaveBeenCalledOnce()
     expect(item.window.focus).toHaveBeenCalledOnce()
-    expect(item.activate).toHaveBeenCalledWith({ connectionId: '123e4567-e89b-42d3-a456-426614174000', kind: 'action-required' })
+    expect(item.activate).toHaveBeenCalledWith({ sessionId: 'sess_1', conversationId: 'conv_main', kind: 'action-required' })
   })
 })

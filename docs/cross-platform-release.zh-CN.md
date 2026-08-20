@@ -8,7 +8,7 @@ GitHub Actions 在原生 runner 上构建 x64 产物：
 - macOS Intel：DMG 与 ZIP
 - Linux：AppImage 与 DEB
 
-Pull Request 只运行类型检查、测试、生产 bundle 和 Team v2 协议测试。`main`、`workflow_dispatch` 与 `v*` 标签运行三平台打包；标签版本与 `package.json` 一致时才发布 GitHub Release。
+Pull Request 运行类型检查、测试、生产 bundle 和上游 app-server 契约测试。`main`、`workflow_dispatch` 与 `v*` 标签运行三平台打包；标签版本与 `package.json` 一致时才发布 GitHub Release。
 
 当前产物未进行 Windows code signing、Apple Developer ID 签名或 notarization，也不提供 ARM64 和自动更新。
 
@@ -16,15 +16,16 @@ Pull Request 只运行类型检查、测试、生产 bundle 和 Team v2 协议�
 
 CI 不读取开发机工作树，也不跟随移动分支：
 
-1. 检出固定 Bingo commit `9ed235c393045a48b9dcdad108dfc0fa53a6890a`，对应 Cargo 版本 `v0.4.0`。
-2. 应用 `vendor/bingo/v0.4.0-protocol-v1.patch`。
+1. 检出固定 Bingo commit `7bee209d191c41b62b8b9e135bf5124f581e7505`，对应 Cargo 版本与 tag `v0.4.1`。
+2. 校验检出 commit 精确匹配，不应用本地协议补丁。
 3. 使用 `cargo build --locked --release` 在目标 runner 构建原生二进制。
-4. 验证 `bingo 0.4.0`、wire protocol v1 和完整必需 capability。
-5. 将二进制复制到 `resources/bin/<platform>-<arch>/`，校验复制前后 SHA-256。
-6. electron-builder 只打包当前平台的运行时。
-7. 从最终解包应用中再次执行探针和文件校验。
+4. 对生成的 schema 和 `vendor/bingo/app-server-schema/v1.0/` 做漂移检查。
+5. 验证 `bingo 0.4.1`、app-server initialize 结果、协议 `1.0` 和必需 capability。
+6. 将二进制复制到 `resources/bin/<platform>-<arch>/`，校验复制前后 SHA-256。
+7. electron-builder 只打包当前平台的运行时。
+8. 从最终解包应用中再次执行探针和文件校验。
 
-必需 capability 由 `scripts/bingo-package-lib.mjs` 统一定义，包括设置检查、工作区、附件、上下文和完整 Team v2 能力。
+必需 capability 由 `scripts/bingo-package-lib.mjs` 统一定义，当前要求 `images`、`multiConversation`、`reasoning`、`rooms`、`shell` 与 `teams`。
 
 ## 本地打包
 
@@ -51,7 +52,7 @@ npm run package:win:unpacked
 `npm run verify:package` 校验：
 
 - 包内主程序、Bingo runtime 和 `app.asar` 均存在。
-- Bingo 版本、wire protocol 和 capability 完整。
+- Bingo 版本、app-server initialize 结果、协议和 capability 完整。
 - Windows/Linux 只包含 `zh-CN` 与 `en-US` locale。
 - ASAR 只包含允许的 main/preload 生产依赖。
 - 内置游戏恰好为三款，单包和总量符合门槛。
@@ -66,13 +67,13 @@ npm run package:win:unpacked
 - 默认 workflow 权限是 `contents: read`；仅标签发布 job 使用 `contents: write`。
 - 当前不保存长期签名 secret。
 - 普通构建产物保留 14 天；Release 只接收验证后的原生包与 SHA-256 清单。
-- Bingo 基线 commit 与协议补丁必须一起升级并重新验证。
+- Bingo 基线 commit 与 schema 副本必须一起升级并重新验证。
 
 ## 发布检查
 
 1. 更新并提交 `package.json` 与 lockfile 版本。
 2. 在目标平台运行类型检查、测试、构建和本地包验证。
-3. 确认 vendor patch 能干净应用到固定 commit。
+3. 确认固定 Bingo commit、版本、schema 漂移和 initialize 探针全部通过。
 4. 确认许可证与 `THIRD_PARTY_NOTICES` 准确。
 5. 推送 `vX.Y.Z` 标签，并确认三平台 package job 全部通过。
 6. 核对 GitHub Release 文件名、SHA-256 清单和未签名提示。

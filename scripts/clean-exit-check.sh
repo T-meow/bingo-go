@@ -18,7 +18,7 @@ for cycle in $(seq 1 10); do
   for _ in $(seq 1 100); do
     app_pid=$(pgrep -P "$launcher" -f 'Electron.app/Contents/MacOS/Electron' | head -1 || true)
     [[ -z "$app_pid" ]] && app_pid=$launcher
-    child_pid=$(pgrep -P "$app_pid" -f "$BINARY --json-events" | head -1 || true)
+    child_pid=$(pgrep -P "$app_pid" -f "$BINARY app-server" | head -1 || true)
     [[ -n "$child_pid" ]] && break
     sleep 0.1
   done

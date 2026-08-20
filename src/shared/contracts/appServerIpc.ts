@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type {
+  Action,
   ActionExecuteParams,
   ActionExecuteResult,
   ActionListResult,
@@ -29,7 +30,29 @@ import type {
   TurnInterruptResult
 } from './appServer'
 
-export const APP_SERVER_CHANNEL = 'app-server:channel'
+export const APP_SERVER_CHANNELS = {
+  probe: 'app-server:probe',
+  connect: 'app-server:connect',
+  resume: 'app-server:resume',
+  disconnect: 'app-server:disconnect',
+  listSessions: 'app-server:list-sessions',
+  readConversation: 'app-server:read-conversation',
+  markRead: 'app-server:mark-read',
+  submit: 'app-server:submit',
+  interrupt: 'app-server:interrupt',
+  respond: 'app-server:respond',
+  readConfig: 'app-server:read-config',
+  readCatalog: 'app-server:read-catalog',
+  listActions: 'app-server:list-actions',
+  executeAction: 'app-server:execute-action',
+  readResource: 'app-server:read-resource',
+  registerAsset: 'app-server:register-asset',
+  readAssetDataUrl: 'app-server:read-asset-data-url',
+  queueRead: 'app-server:queue-read',
+  queueReclaimTail: 'app-server:queue-reclaim',
+  sessionDelete: 'app-server:session-delete',
+  restartAfterDefinitionWrite: 'app-server:restart-after-definition-write'
+} as const
 export const APP_SERVER_EVENT = 'app-server:event'
 
 export type AppServerRendererEvent =
@@ -81,6 +104,48 @@ const decisionSchema = z.union([
 ])
 const catalogKindSchema = z.enum(['models', 'providers', 'skills', 'mcpServers', 'images'])
 const resourceKindSchema = z.enum(['agents', 'rooms', 'tasks', 'deliveries', 'backgroundCommands'])
+const thinkingLevelSchema = z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max'])
+const permissionModeSchema = z.enum(['default', 'acceptEdits', 'bypassPermissions', 'dontAsk', 'plan'])
+const permissionRuleDecisionSchema = z.enum(['allow', 'deny', 'ask'])
+const themeSchema = z.enum(['auto', 'dark', 'light'])
+const resourceRevisionSchema = z.object({
+  revision: z.number().int().nonnegative(),
+  scope: z.enum(['session', 'conversation', 'queue', 'config', 'catalog', 'agents', 'rooms', 'tasks', 'team'])
+})
+const rewindTargetSchema = z.union([
+  z.object({ type: z.literal('latest') }),
+  z.object({ type: z.literal('item'), itemId: z.string().min(1) })
+])
+export const appServerActionSchema: z.ZodType<Action> = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('sessionReset') }),
+  z.object({ type: z.literal('sessionRename'), name: z.string().trim().min(1).max(1_000) }),
+  z.object({ type: z.literal('sessionGarbageCollect') }),
+  z.object({ type: z.literal('sessionShare'), open: z.boolean(), public: z.boolean(), output: z.string().nullable().optional() }),
+  z.object({ type: z.literal('sessionChangeDirectory'), path: z.string().min(1) }),
+  z.object({ type: z.literal('conversationCompact'), instructions: z.string().nullable().optional() }),
+  z.object({ type: z.literal('conversationRewind'), mode: z.enum(['preview', 'applied']), target: rewindTargetSchema }),
+  z.object({ type: z.literal('modelSelect'), model: z.string().min(1) }),
+  z.object({ type: z.literal('providerSelect'), provider: z.string().min(1) }),
+  z.object({ type: z.literal('providerLogin'), provider: z.string().min(1) }),
+  z.object({ type: z.literal('providerLogout'), provider: z.string().min(1) }),
+  z.object({ type: z.literal('thinkingSelect'), level: thinkingLevelSchema }),
+  z.object({ type: z.literal('permissionModeSet'), mode: permissionModeSchema }),
+  z.object({ type: z.literal('permissionRuleAdd'), decision: permissionRuleDecisionSchema, rule: z.string().min(1) }),
+  z.object({ type: z.literal('permissionRuleRemove'), decision: permissionRuleDecisionSchema, rule: z.string().min(1) }),
+  z.object({ type: z.literal('mcpEnable'), server: z.string().min(1) }),
+  z.object({ type: z.literal('mcpDisable'), server: z.string().min(1) }),
+  z.object({ type: z.literal('mcpReconnect'), server: z.string().nullable().optional() }),
+  z.object({ type: z.literal('skillInvoke'), skill: z.string().min(1), input: z.string().nullable().optional() }),
+  z.object({ type: z.literal('teamStart'), members: z.array(z.string().min(1)).nullable().optional() }),
+  z.object({ type: z.literal('teamAssign'), member: z.string().min(1), task: z.string().trim().min(1) }),
+  z.object({ type: z.literal('teamStop'), member: z.string().nullable().optional() }),
+  z.object({ type: z.literal('teamScaffold'), name: z.string().trim().min(1) }),
+  z.object({ type: z.literal('teamMemoryGarbageCollect') }),
+  z.object({ type: z.literal('roomJoin'), room: z.string().min(1) }),
+  z.object({ type: z.literal('roomLeave'), room: z.string().min(1) }),
+  z.object({ type: z.literal('commandPromote'), itemId: z.string().min(1) }),
+  z.object({ type: z.literal('themeSet'), theme: themeSchema })
+])
 
 export const appServerProbeInputSchema = z.object({ workspacePath: z.string().min(1) })
 export const appServerConnectInputSchema = z.object({ workspacePath: z.string().min(1) })
@@ -98,6 +163,12 @@ export const appServerSubmitInputSchema = z.object({
   prose: z.boolean().optional()
 })
 export const appServerInterruptInputSchema = z.object({ conversationId: z.string().min(1), turnId: z.string().min(1) })
+export const appServerMarkReadInputSchema = z.object({
+  conversationId: z.string().min(1),
+  expectedRevision: z.number().int().nonnegative(),
+  lastItemId: z.string().nullable().optional(),
+  lastRoomSeq: z.number().int().nonnegative().nullable().optional()
+})
 export const appServerRespondInputSchema = z.object({
   interactionId: z.string().min(1),
   decision: decisionSchema,
@@ -109,6 +180,16 @@ export const appServerRegisterAssetInputSchema = z.object({ path: z.string().min
 export const appServerReadAssetInputSchema = z.object({ assetId: z.string().min(1), mime: z.string().min(1) })
 export const appServerActionExecuteInputSchema = z.object({
   originConversationId: z.string().min(1),
-  precondition: z.unknown().nullable().optional(),
-  action: z.unknown()
+  precondition: resourceRevisionSchema.nullable().optional(),
+  action: appServerActionSchema
 })
+export const appServerQueueReadInputSchema = z.object({
+  conversationId: z.string().min(1),
+  cursor: z.string().nullable().optional(),
+  limit: z.number().int().min(1).max(1_000).nullable().optional()
+})
+export const appServerQueueReclaimInputSchema = z.object({
+  conversationId: z.string().min(1),
+  expectedRevision: z.number().int().nonnegative().nullable().optional()
+})
+export const appServerSessionDeleteInputSchema = z.object({ locator: locatorSchema })

@@ -39,7 +39,6 @@ describe('RuntimeLocator probe', () => {
       ok: true,
       value: {
         bingoVersion: '0.4.1',
-        protocolVersion: 1,
         workspacePath: process.cwd(),
         appServer: {
           protocol: { major: 1, minor: 0 },
@@ -65,6 +64,18 @@ describe('RuntimeLocator probe', () => {
     expect(result).toMatchObject({ ok: true, value: { binaryPath: fakeServer, bingoVersion: '0.4.1' } })
   })
 
+  it('rejects a file path as a workspace before starting a session', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'bingo-go-workspace-file-'))
+    const workspaceFile = join(directory, 'index.html')
+    await writeFile(workspaceFile, '<!doctype html>')
+    const scenario = await scenarioPath('workspace-file')
+    const result = await new RuntimeLocator({
+      env: { ...process.env, BINGO_GUI_BINARY: fakeServer, BINGO_FAKE_SCENARIO: scenario }
+    }).probe(workspaceFile)
+    expect(result).toMatchObject({ ok: false, error: { code: 'BAD_ARGUMENT' } })
+    if (!result.ok) expect(result.error.msg).toContain('not a directory')
+  })
+
   it.runIf(process.platform === 'win32')('probes a .cmd shim from a path containing spaces', async () => {
     const directory = join(await mkdtemp(join(tmpdir(), 'bingo-go-cmd-')), 'path with spaces')
     await mkdir(directory)
@@ -75,6 +86,6 @@ describe('RuntimeLocator probe', () => {
       env: { ...process.env, BINGO_GUI_BINARY: shim, BINGO_FAKE_SCENARIO: scenario }
     }).probe(process.cwd())
     if (!result.ok) throw new Error(`cmd probe failed: ${JSON.stringify(result)}`)
-    expect(result.value).toMatchObject({ bingoVersion: '0.4.1', protocolVersion: 1 })
+    expect(result.value).toMatchObject({ bingoVersion: '0.4.1' })
   })
 })

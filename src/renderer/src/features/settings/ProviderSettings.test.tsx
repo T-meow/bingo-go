@@ -11,7 +11,7 @@ const snapshot: SettingsSnapshot = {
   values: {
     apiBaseUrl: '', provider: 'opencode-go', model: 'deepseek-v4-flash', thinkingLevel: 'off', permissionMode: 'default', theme: 'auto', motion: 'auto',
     sendImages: true, cacheControl: false, respondToBashCommands: true, shell: '', permissions: { allow: [], ask: [], deny: [] },
-    team: { autoStart: false }, experimental: { agentChannels: false, channelMessageLimit: 500, agentMessageLimit: 50 }, share: { baseUrl: '' }
+    share: { baseUrl: '' }
   },
   layers: {
     user: { path: '/home/.config/bingo/settings.json', exists: true, keys: [], values: {} },
@@ -20,7 +20,9 @@ const snapshot: SettingsSnapshot = {
   },
   sources: {},
   shadowed: [],
-  providers: [{ name: 'opencode-go', protocol: 'openai', apiBaseUrl: 'https://opencode.ai/zen/go', supportsImages: false, credentialConfigured: false, builtin: true }]
+  providers: [{ name: 'opencode-go', protocol: 'openai', apiBaseUrl: 'https://opencode.ai/zen/go', supportsImages: false, credentialConfigured: false, builtin: true }],
+  mcpServers: [],
+  hooks: []
 }
 
 describe('ProviderSettings', () => {

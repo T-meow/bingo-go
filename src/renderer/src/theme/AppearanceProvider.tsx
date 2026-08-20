@@ -8,7 +8,7 @@ import type { AppearancePreferencesV1, AppearanceSnapshot, GuiError } from '../.
 const DEFAULT_APPEARANCE: AppearancePreferencesV1 = {
   schemaVersion: 1,
   colorMode: 'system',
-  accentColor: '#756AA8',
+  accentColor: '#1F8A7A',
   density: 'comfortable',
   motion: 'system',
   inspectorCollapsed: false
@@ -107,12 +107,12 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }):
         colorPrimary: appliedValues.accentColor,
         colorInfo: appliedValues.accentColor,
         colorTextLightSolid: readableForeground(appliedValues.accentColor),
-        colorBgLayout: dark ? '#171719' : '#F6F7F6',
-        colorBgContainer: dark ? '#202024' : '#FFFFFF',
-        colorBgElevated: dark ? '#252529' : '#FFFFFF',
-        colorFillAlter: dark ? '#29292D' : '#F3F4F3',
-        colorTextSecondary: dark ? '#ADAFB3' : '#666B67',
-        colorBorderSecondary: dark ? '#343438' : '#E4E5E4',
+        colorBgLayout: dark ? '#151A19' : '#F3F6F5',
+        colorBgContainer: dark ? '#1D2321' : '#FFFFFF',
+        colorBgElevated: dark ? '#242B29' : '#FFFFFF',
+        colorFillAlter: dark ? '#28302E' : '#EEF2F0',
+        colorTextSecondary: dark ? '#AEB9B5' : '#5E6A66',
+        colorBorderSecondary: dark ? '#35403C' : '#DDE5E2',
         borderRadius: 6,
         borderRadiusLG: 8,
         fontSize: 14,
@@ -124,7 +124,7 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }):
         Drawer: { borderRadiusLG: 6 },
         Modal: { borderRadiusLG: 8 },
         Menu: { itemBorderRadius: 6, itemMarginInline: 0 },
-        Table: { headerBg: dark ? '#29292D' : '#F3F4F3' }
+        Table: { headerBg: dark ? '#252D2A' : '#F0F4F2' }
       }
     }
   }, [appliedValues, dark, reducedMotion])

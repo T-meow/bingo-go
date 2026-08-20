@@ -1,39 +1,51 @@
 import { app, BrowserWindow, Menu, Notification } from 'electron'
 import { join } from 'node:path'
-import { registerIpc, sendSessionEvent } from './ipc/registerIpc'
-import { registerAppServerIpc } from './ipc/registerAppServerIpc'
-import { RuntimeLocator } from './runtime/runtimeLocator'
-import { SessionManager } from './runtime/sessionManager'
-import { StdioBingoSession } from './runtime/stdioBingoSession'
+import { registerAppServerIpc, type AppServerIpcController } from './ipc/registerAppServerIpc'
+import { registerHostIpc, type HostIpcController } from './ipc/registerHostIpc'
 import { bundledBingoPath } from './runtime/bundledBinary'
-import { SettingsRepository } from './storage/settingsRepository'
+import { RuntimeLocator } from './runtime/runtimeLocator'
 import { AppearanceRepository } from './storage/appearanceRepository'
-import { TranscriptRepository } from './storage/transcriptRepository'
-import { WorkspaceRepository } from './storage/workspaceRepository'
 import { NotificationPreferencesRepository } from './storage/notificationPreferencesRepository'
+import { SettingsRepository } from './storage/settingsRepository'
+import { UserProfileRepository } from './storage/userProfileRepository'
+import { WorkspaceRepository } from './storage/workspaceRepository'
 import { NotificationCoordinator } from './notifications/notificationCoordinator'
 import { IPC } from '../shared/contracts/ipc'
 import { GamePackRepository } from './game-packs/gamePackRepository'
 import { GameProtocol, registerGameProtocolScheme } from './game-packs/gameProtocol'
 import { GameWindowManager } from './game-packs/gameWindowManager'
-import { UserProfileRepository } from './storage/userProfileRepository'
 
-let sessions: SessionManager | null = null
+let appServerIpc: AppServerIpcController | null = null
+let hostIpc: HostIpcController | null = null
 let gameWindows: GameWindowManager | null = null
+let shuttingDown = false
 
 async function createWindow(): Promise<void> {
   Menu.setApplicationMenu(null)
-  const initialWorkspace = process.env.BINGO_GUI_CWD ?? process.cwd()
+  const initialWorkspace = process.env.BINGO_GUI_CWD
+    ?? (app.isPackaged ? app.getPath('documents') : process.cwd())
   const workspace = new WorkspaceRepository(join(app.getPath('userData'), 'workspace.json'), initialWorkspace)
   await workspace.initialize(!process.env.BINGO_GUI_CWD)
+
   const windowIcon = app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'build', 'icon.png')
   const window = new BrowserWindow({
-    width: 1100, height: 720, minWidth: 800, minHeight: 600, show: false, icon: windowIcon,
+    width: 1180,
+    height: 760,
+    minWidth: 800,
+    minHeight: 600,
+    show: false,
+    icon: windowIcon,
     autoHideMenuBar: true,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, nodeIntegration: false, sandbox: true }
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
   })
   window.setMenuBarVisibility(false)
   window.removeMenu()
+
   const bundledBinary = app.isPackaged ? bundledBingoPath(process.resourcesPath) : undefined
   const binaryPath = process.env.BINGO_GUI_BINARY ?? bundledBinary ?? 'bingo'
   const locator = new RuntimeLocator({ bundledBinary })
@@ -47,32 +59,18 @@ async function createWindow(): Promise<void> {
     }
   })
   try {
-    const snapshot = await notificationPreferences.read()
-    notifications.updatePreferences(snapshot.values)
+    notifications.updatePreferences((await notificationPreferences.read()).values)
   } catch {
-    // Invalid preferences keep notifications disabled until the user resolves the file.
     notifications.disable()
   }
-  sessions = new SessionManager(
-    (handlers, launch) => new StdioBingoSession(
-      binaryPath,
-      launch?.workspacePath ?? workspace.current(),
-      handlers,
-      process.env,
-      launch?.bindSessionWorkspace ?? false
-    ),
-    (event) => {
-      notifications.handle(event)
-      sendSessionEvent(window, event)
-    }
-  )
+
   const home = process.env.HOME ?? process.env.USERPROFILE ?? app.getPath('home')
-  const transcripts = new TranscriptRepository(join(home, '.local', 'share', 'bingo', 'transcripts'))
   const userConfigDirectory = process.env.XDG_CONFIG_HOME ?? join(home, '.config')
   const settings = new SettingsRepository(join(userConfigDirectory, 'bingo', 'settings.json'))
   const appearance = new AppearanceRepository(join(app.getPath('userData'), 'preferences.json'))
   const profile = new UserProfileRepository(join(app.getPath('userData'), 'profile.json'), join(app.getPath('userData'), 'avatars'))
   await profile.initialize().catch(() => undefined)
+
   const builtinGameRoot = app.isPackaged ? join(process.resourcesPath, 'game-packs') : join(app.getAppPath(), 'games', 'build')
   let gamePacks: GamePackRepository | undefined
   try {
@@ -86,11 +84,28 @@ async function createWindow(): Promise<void> {
     gameWindows = null
     console.error('Game package subsystem initialization failed.', error)
   }
-  registerIpc(window, locator, sessions, transcripts, settings, binaryPath, appearance, workspace, notificationPreferences, notifications, gamePacks, gameWindows ?? undefined, profile)
-  registerAppServerIpc(window, locator, binaryPath)
+
+  hostIpc = registerHostIpc(window, {
+    locator,
+    binaryPath,
+    settings,
+    appearance,
+    workspace,
+    notificationPreferences,
+    notifications,
+    profile,
+    gamePacks,
+    gameWindows: gameWindows ?? undefined
+  })
+  appServerIpc = registerAppServerIpc(window, locator, binaryPath, {
+    workspacePath: () => workspace.current(),
+    onNotification: (snapshot, notification) => notifications.handle(snapshot, notification),
+    onExit: (snapshot, error) => notifications.handleExit(snapshot, error)
+  })
+
   window.once('ready-to-show', () => window.show())
-  if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else void window.loadFile(join(__dirname, '../renderer/index.html'))
+  if (process.env.ELECTRON_RENDERER_URL) await window.loadURL(process.env.ELECTRON_RENDERER_URL)
+  else await window.loadFile(join(__dirname, '../renderer/index.html'))
 }
 
 if (process.platform === 'win32') app.setAppUserModelId('io.github.tmeow.bingogo')
@@ -98,19 +113,23 @@ registerGameProtocolScheme()
 
 if (!app.requestSingleInstanceLock()) app.quit()
 else {
-  app.whenReady().then(() => {
-    void createWindow()
-    app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow() })
-  })
+  app.whenReady().then(() => { void createWindow() })
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow() })
   app.on('before-quit', (event) => {
+    if (shuttingDown) return
+    event.preventDefault()
+    shuttingDown = true
     gameWindows?.closeActive()
     gameWindows = null
-    if (!sessions) return
-    event.preventDefault()
-    const active = sessions
-    sessions = null
+    hostIpc?.dispose()
+    hostIpc = null
+    const controller = appServerIpc
+    appServerIpc = null
     const force = setTimeout(() => app.exit(0), 3_000)
-    void Promise.race([active.close(), new Promise((resolve) => setTimeout(resolve, 2_000))]).finally(() => {
+    void Promise.race([
+      controller?.dispose() ?? Promise.resolve(),
+      new Promise((resolve) => setTimeout(resolve, 2_000))
+    ]).finally(() => {
       clearTimeout(force)
       app.exit(0)
     })

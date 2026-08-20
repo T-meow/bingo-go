@@ -131,10 +131,10 @@ export function ProviderSettings({ snapshot, error, busy, activeProvider, onTran
   }
 
   return <SettingsSectionLayout title="API 供应商" description="管理 Bingo 已有 Provider 配置和静态 API Key。" extra={<Button type="primary" icon={<PlusOutlined />} disabled={busy} onClick={() => setEditing('new')}>添加供应商</Button>}>
-    {error && <Alert type="error" showIcon message={error.code} description={error.msg} />}
+    {error && <Alert type="error" showIcon title={error.code} description={error.msg} />}
     {snapshot.providers.length === 0 ? <Empty description="没有可用供应商" /> : <Table rowKey="name" size="middle" pagination={false} columns={columns} dataSource={snapshot.providers} />}
     <Drawer title={editing === 'new' ? '添加供应商' : `编辑 ${current?.name ?? ''}`} size={480} open={Boolean(editing)} maskClosable={!saving} closable={!saving} onClose={closeEditor} extra={<Space>{current && current.name !== 'default' && current.source === 'user' && <Button danger icon={<DeleteOutlined />} onClick={remove}>删除</Button>}<Button type="primary" loading={saving} disabled={!form.name.trim() || (form.credentialAction === 'replace' && !form.apiKey)} onClick={() => void save()}>保存并测试</Button></Space>}>
-      {current && !current.editable && <Alert type="warning" showIcon message="该定义来自工作区设置，只能查看。" />}
+      {current && !current.editable && <Alert type="warning" showIcon title="该定义来自工作区设置，只能查看。" />}
       <Form layout="vertical" className="drawer-form">
         <Form.Item label="名称" required><Input value={form.name} disabled={lockedIdentity || editing !== 'new'} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Form.Item>
         <Form.Item label="协议" required><Select value={form.protocol} disabled={Boolean(current && (lockedIdentity || !current.editable))} options={[{ value: 'anthropic', label: 'Anthropic Messages' }, { value: 'openai', label: 'OpenAI Responses' }]} onChange={(protocol) => setForm({ ...form, protocol })} /></Form.Item>
@@ -151,7 +151,7 @@ export function ProviderSettings({ snapshot, error, busy, activeProvider, onTran
 }
 
 function FallbackSelector({ providers, provider, model, models, onProvider, onModel }: { providers: ProviderView[]; provider: string; model: string; models: string[]; onProvider: (value: string) => Promise<void>; onModel: (value: string) => void }): React.JSX.Element {
-  return <Space direction="vertical" className="fallback-selector"><Typography.Text>当前供应商正在使用，删除时必须同时选择替代项。</Typography.Text><Select value={provider || undefined} placeholder="替代供应商" options={providers.map((item) => ({ value: item.name, label: item.name }))} onChange={(value) => void onProvider(value)} /><ModelPicker value={model} models={models} placeholder="选择或输入替代模型" onChange={onModel} /></Space>
+  return <Space orientation="vertical" className="fallback-selector"><Typography.Text>当前供应商正在使用，删除时必须同时选择替代项。</Typography.Text><Select value={provider || undefined} placeholder="替代供应商" options={providers.map((item) => ({ value: item.name, label: item.name }))} onChange={(value) => void onProvider(value)} /><ModelPicker value={model} models={models} placeholder="选择或输入替代模型" onChange={onModel} /></Space>
 }
 
 function emptyProvider(): ProviderForm { return { name: '', protocol: 'anthropic', apiBaseUrl: '', supportsImages: true, credentialAction: 'unchanged', apiKey: '' } }

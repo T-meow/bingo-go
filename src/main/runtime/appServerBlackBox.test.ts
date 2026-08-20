@@ -38,7 +38,7 @@ describe.runIf(binary !== null)('real bingo app-server', () => {
     const result = await new RuntimeLocator({ env: { ...process.env, BINGO_GUI_BINARY: binary as string } }).probe(process.cwd())
     expect(result).toMatchObject({
       ok: true,
-      value: { bingoVersion: '0.4.1', protocolVersion: 1, appServer: { protocol: { major: 1, minor: 0 } } }
+      value: { bingoVersion: '0.4.1', appServer: { protocol: { major: 1, minor: 0 } } }
     })
   })
 })

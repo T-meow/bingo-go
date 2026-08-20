@@ -70,8 +70,8 @@ export function NotificationSettings({ onTransactionChange }: { onTransactionCha
   }, [dirty, onTransactionChange, restore, save])
 
   return <SettingsSectionLayout title="通知" description="控制 Bingo Go 在后台运行时发送的系统通知。">
-    {error && <Alert type="error" showIcon message={error.code} description={error.msg} action={!snapshot ? <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void load()}>重新读取</Button> : undefined} />}
-    {snapshot && !snapshot.supported && <Alert type="info" showIcon message="当前系统不支持通知" description="偏好仍会保存，但 Bingo Go 无法在此环境中显示系统通知。" />}
+    {error && <Alert type="error" showIcon title={error.code} description={error.msg} action={!snapshot ? <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void load()}>重新读取</Button> : undefined} />}
+    {snapshot && !snapshot.supported && <Alert type="info" showIcon title="当前系统不支持通知" description="偏好仍会保存，但 Bingo Go 无法在此环境中显示系统通知。" />}
     {snapshot && <>
       <div className="settings-form-section">
         <NotificationRow title="系统通知" description="仅在窗口隐藏、最小化或失焦时发送。"><Switch aria-label="系统通知" checked={draft.enabled} onChange={(value) => update('enabled', value)} /></NotificationRow>

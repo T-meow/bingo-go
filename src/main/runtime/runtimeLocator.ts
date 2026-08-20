@@ -1,4 +1,4 @@
-import { access, realpath } from 'node:fs/promises'
+import { access, realpath, stat } from 'node:fs/promises'
 import { delimiter, isAbsolute, join } from 'node:path'
 import { constants } from 'node:fs'
 import { spawn } from 'node:child_process'
@@ -41,9 +41,7 @@ export class RuntimeLocator {
       value: {
         binaryPath: binary.value,
         bingoVersion: protocol.value.bingoVersion,
-        protocolVersion: 1,
         workspacePath: workspace.value,
-        capabilities: protocol.value.capabilities,
         appServer: protocol.value.appServer
       }
     }
@@ -88,30 +86,35 @@ export class RuntimeLocator {
   private async resolveWorkspace(path: string): Promise<Result<string>> {
     if (!isAbsolute(path)) return this.error('BAD_ARGUMENT', `Workspace path must be absolute: ${path}`)
     try {
-      return { ok: true, value: await realpath(path) }
+      const resolved = await realpath(path)
+      if (!(await stat(resolved)).isDirectory()) {
+        return this.error('BAD_ARGUMENT', `Workspace path is not a directory: ${path}`)
+      }
+      return { ok: true, value: resolved }
     } catch {
       return this.error('BAD_ARGUMENT', `Workspace is unavailable: ${path}`)
     }
   }
 
-  private async probeAppServer(binary: string, cwd: string, env: NodeJS.ProcessEnv): Promise<Result<{ bingoVersion: string; capabilities: string[]; appServer: NonNullable<RuntimeInfo['appServer']> }>> {
+  private async probeAppServer(binary: string, cwd: string, env: NodeJS.ProcessEnv): Promise<Result<{ bingoVersion: string; appServer: RuntimeInfo['appServer'] }>> {
     let stderr = ''
     const connection = new AppServerConnection(binary, cwd, {
       onNotification: () => undefined,
       onDesync: () => undefined,
       onExit: (_exit, stderrText) => { stderr = stderrText }
     }, env)
+    let timeoutHandle: NodeJS.Timeout | undefined
     try {
       const timeout = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error('bingo did not complete the app-server initialize handshake within 10 seconds')), this.options.timeoutMs ?? PROBE_TIMEOUT_MS)
+        timeoutHandle = setTimeout(() => reject(new Error('bingo did not complete the app-server initialize handshake within 10 seconds')), this.options.timeoutMs ?? PROBE_TIMEOUT_MS)
       })
       const initialized = await Promise.race([connection.start(), timeout])
+      if (timeoutHandle) clearTimeout(timeoutHandle)
       await connection.shutdown()
       return {
         ok: true,
         value: {
           bingoVersion: initialized.server.version,
-          capabilities: [],
           appServer: {
             protocol: initialized.protocol,
             capabilities: initialized.capabilities,
@@ -120,6 +123,7 @@ export class RuntimeLocator {
         }
       }
     } catch (error) {
+      if (timeoutHandle) clearTimeout(timeoutHandle)
       await connection.close().catch(() => undefined)
       const detail = [error instanceof Error ? error.message : String(error), stderr.trim()].filter(Boolean).join('; ')
       return this.error('BINGO_PROTOCOL_UNSUPPORTED', `This bingo version does not support the GUI app-server. ${detail}`)

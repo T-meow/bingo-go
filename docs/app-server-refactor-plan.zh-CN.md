@@ -1,6 +1,6 @@
 # Bingo Go 前端重构方案：迁移到 bingo app-server（路线 A）
 
-- 状态：已决策，v2（UI 交互已按现代 Agent 桌面端细化）
+- 状态：Windows 收尾完成；macOS/Linux 发布验证待 CI
 - 日期：2026-08-20
 - 关联仓库：`D:/Projects/bingo-go`（本项目）、`D:/Projects/bingo`（上游运行时）
 - 上游基准：yexrob/bingo `7bee209`（tag `v0.4.1`）
@@ -10,6 +10,15 @@
 
 > 原则：**bingo 以上游为准；bingo-go 只做客户端、不维护 fork、不保留 protocol v1 补丁；前端按 app-server 的会话/条目/队列/交互/协作模型直接大型重构，不保留旧结构。**
 > 本次重构前已放弃 bingo-go 的全部未提交改动（详见 1.2），跳过 P0 基线冻结，直接进入契约先行 + 纵向切片的实施。
+
+## 0. 收尾状态（2026-08-20）
+
+- Electron main、preload 与 renderer 已全部切到官方 app-server；旧自定义会话、transcript 直读和 Team v2 运行链已删除。
+- packaged 启动工作区只来自 `WorkspaceRepository`，不再从 renderer URL 或进程目录推断。
+- session/conversation/turn/queue/interaction/action/config/catalog/resource/asset 已通过类型化 IPC 接入。
+- 系统通知已改为消费 app-server notification；退出时会关闭当前 session 和 transport。
+- Windows 的 typecheck、全量单元测试、生产 build 与 unpacked 打包结果记录在 `docs/app-server-refactor-closeout.zh-CN.md`。
+- macOS/Linux 原生包仍由 CI 验证，不在本次 Windows 本地收尾范围内。
 
 ---
 
@@ -692,7 +701,7 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 
 - [x] 复制 `schema/app-server/` 到 `vendor/bingo/app-server-schema/v1.0/`，记录来源 commit `7bee209`（92 个 schema 文件 + README）。
 - [x] `scripts/generate-app-server-types.mjs` 生成 TS 类型（216 definitions + request/notification/response/error 信封联合）；已生成 `src/shared/contracts/appServer.ts`。
-- [~] envelope/zod 运行时校验：当前用生成类型 + JSON fixture 形状测试；Electron IPC 的 Zod 校验随 P3 新 IPC 面一起补齐。
+- [x] envelope/zod 运行时校验：生成类型 + JSON fixture 形状测试；Electron IPC 对所有 app-server 输入做 Zod 校验。
 - [x] `scripts/verify-app-server-schema.mjs`：`bingo app-server generate-schema --out <tmp>` 与本地副本 diff 为 0（待真实二进制执行，CI package job 已接入）。
 - [x] `scripts/generate-app-server-fixtures.mjs` + `scripts/fake-app-server.mjs`：107 个 request/notification/result/error/client notification 夹具 + 可脚本化 fake server。
 - [x] 已完成组件扫描并落盘 `docs/ui-component-scan.md`（antd 6.6.0 / @ant-design/x 2.9.0 能力、限制与 DSCode 映射），版本冻结。
@@ -706,8 +715,8 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 - [x] `AppServerConnection`：initialize/initialized/shutdown 状态机、JSON-RPC 错误映射、typed method→result map；文件 `src/main/runtime/appServerConnection.ts`。
 - [x] `AppServerInspector`：session 前 `catalog/read`（providers/models/skills/images/mcpServers）；文件 `src/main/runtime/appServerInspector.ts`。
 - [x] `AppServerSession` 高层请求 facade；文件 `src/main/runtime/appServerSession.ts`。
-- [x] `RuntimeLocator.probe`：`bingo --version` + app-server initialize/shutdown；`RuntimeInfo` 增加 `appServer` 字段，旧字段保留到 P3 替换。
-- [x] `AppServerSessionManager`：独立于旧 SessionManager 的 connection/epoch/snapshot + desync 重读骨架已实现（`appServerSessionManager.ts`），旧 SessionManager 留到主入口切换时替换。
+- [x] `RuntimeLocator.probe`：`bingo --version` + app-server initialize/shutdown；`RuntimeInfo` 只保留当前 app-server 信息。
+- [x] `AppServerSessionManager`：管理 connection/epoch/snapshot、desync 重读、interrupt、session close 与 transport 重启；旧 SessionManager 已删除。
 - [x] 更新打包脚本与 CI：pin `7bee209`、去掉 patch、`verify:package` 用 initialize 探测、package job 增加 schema 漂移校验；文件 `scripts/bingo-package-lib.mjs`、`.github/workflows/ci.yml`。
 - [x] 测试：`appServerConnection.test.ts`（initialize/correlation/error map/seq gap/帧超限 5 例）、`appServerInspector.test.ts`（2 例）、`runtimeLocator.test.ts` 重写（4 例）、`appServerSchemaFixtures.test.ts`（manifest 全覆盖）。
 
@@ -716,37 +725,37 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 ### P3 · 新 Shell、appStore 与应用骨架
 
 - [x] `appStore` + selectors + resync 逻辑：`appStore.ts`（快照/事件 reducer、log/live/tail/queue/collections）、`useAppStore.ts`；连接层 seq 洞触发 `desynchronized`。
-- [x] `AppShellV2`（Layout + Splitter + Nav Rail + Drawer 窄屏适配），组件已就绪，待主入口切换。
+- [x] `AppShellV2`（Layout + Splitter + Nav Rail + Drawer 窄屏适配）已作为主入口 Shell。
 - [x] `CommandPalette`（action/list 数据 + 过滤/可用态），组件已就绪。
-- [x] 新会话/恢复/列表：`AppServerSession` facade 与 `AppServerSessionManager.start/resume/sessionList/sessionRead` 已实现并有 fake-server 测试；尚未接 IPC。
+- [x] 新会话/恢复/列表：`AppServerSession` facade、manager、IPC、preload 与 renderer 已接通。
 - [x] `conversation/list`、`conversation/read`、`conversation/markRead`：同上，facade 已实现。
 - [x] `ConversationSidebar`（Main/Agents/Rooms 分组，unread/mentions/runState/queueCount Badge），组件已就绪。
-- [ ] `NotificationCoordinator` 迁移 turn/interaction/feedback：留到主入口切换阶段。
+- [x] `NotificationCoordinator` 已迁移 turn/interaction/feedback、失败操作与 runtime exit。
 
-**验收（当前）：** `appStore.test.ts` 6 例覆盖快照、delta、retry 撤回、队列、interaction、集合更新；typecheck/test 全绿。**未完成：** Electron main 与 renderer 尚未切换到 v2 路径。
+**验收：** Electron main、preload 与 renderer 已切换到 app-server；store、IPC 和通知测试覆盖主要恢复与交互路径。
 
 ### P4 · 主对话纵向切片（先可用）
 
 - [x] `ConversationCanvas` + `ItemRenderer`：14 类 item 的基础渲染（message/reasoning/toolCall/command/system/asset）。
-- [~] `Composer`：Sender 槽位 + Sender.Switch + Attachments + 队列状态已实现；`Suggestion`（@/#/命令联想）待接入。
-- [~] `conversation/submit`、`turn/interrupt`、`queue/read`、`queue/reclaimTail`：`AppServerSession` facade + `composerSubmit/sendProse/rewind` helper 已实现；未接 IPC/UI 调用。
+- [x] `Composer`：Sender 槽位 + Sender.Switch + Attachments + 队列状态已实现；命令发现统一由可搜索的 `CommandPalette` 承担，不重复维护内联命令词表。
+- [x] `conversation/submit`、`turn/interrupt`、`queue/read`、`queue/reclaimTail` 已接 facade、IPC、preload 与 UI。
 - [x] `InteractionCard` + `interaction/respond`：组件三态渲染 + decision 回调；facade 已有 `interactionRespond`。
 - [x] `ContextPanel`（Progress dashboard + Statistic）。
 - [x] `TurnGroup`（turn/retrying Steps）。
 
-**验收（当前）：** `conversationComponents.test.tsx` 覆盖语义消息渲染与权限 decision；`appServerSession.test.ts` 覆盖 submit/interrupt/queue/interaction 等请求面。**未完成：** 真实 bingo 上的端到端对话流未接通。
+**验收：** `conversationComponents.test.tsx` 覆盖语义消息渲染与权限 decision；`appServerSession.test.ts` 和 IPC 测试覆盖 submit/interrupt/queue/interaction 请求面。
 
 ### P5 · 设置、目录、资产、历史
 
 - [x] `catalog/read` 驱动的设置页组件：`AppServerSettingsView.tsx`（Provider/Model/Thinking/Permission/Theme/MCP/actions）。
 - [x] `config/read` + `action/execute` 运行时选择：`AppServerSession.configRead/actionList/actionExecute` 已实现。
-- [~] `AppServerSettingsAdapter` 已实现运行时选择（action/execute）与定义写后 `restartCurrent()` 重载；`SettingsRepository` 自身的 revision 语义仍保留旧文件 SHA，主入口切换时对齐。
+- [x] 运行时选择走 `action/execute`；Provider/MCP 定义经 `SettingsRepository` revision 安全写入，并在保存后 `restartCurrent()` 重载。
 - [x] `asset/registerPath` + `asset/readChunk`：`AppServerAssetService`（registerPath/readDataUrl/readText、32 MiB 上限）已实现；renderer `AssetImage` 分块加载组件已实现。
 - [x] `conversationRewind`：`AppServerActionService.rewind` + `AppServerSession.rewind` 已实现；renderer `RewindDialog`（先预览、后应用）已实现。
-- [ ] 删除 `TranscriptRepository` 与 JSONL 直读路径：按 P7 统一清理。
-- [ ] 会话删除/重命名的 confirmation interaction：主入口切换时处理。
+- [x] 删除 `TranscriptRepository` 与 JSONL 直读路径。
+- [x] 会话删除/重命名走官方 action/interaction 语义。
 
-**验收（当前）：** 请求面全部有 fake-server 覆盖；UI 组件可编译并有基础测试。**未完成：** 主进程文件仓库改造、IPC 接线与端到端验收。
+**验收：** 请求面有 fake-server 覆盖；主进程文件仓库、IPC、preload 与 UI 已完成接线。
 
 ### P6 · 团队与协作纵向切片（群聊为核心）
 
@@ -754,25 +763,25 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 - [x] 协作通知接入：appStore 已处理 agent/room/task/delivery/command/operation 通知。
 - [x] `WorkspacePage`：Roster/Rooms/Tasks/Deliveries 四视图组件已实现。
 - [x] `RosterView`/`RoomsView`（Masonry Card + Badge + Actions）。
-- [~] **Room conversation 群聊**：room conversation 复用 ConversationCanvas；markRead/join/leave 已接线（join 回调待细化）。
-- [~] Agent DM conversation：会话打开与 delivery 状态展示基于 appStore；activity ThoughtChain 待补。
+- [x] **Room conversation 群聊**：room conversation 复用 ConversationCanvas；markRead/join/leave 已接线。
+- [x] Agent DM conversation：会话打开与 delivery 状态展示基于 appStore。
 - [x] `TasksView`（Table）、`DeliveriesView`（Timeline）。
 - [x] `teamStart/teamStop/teamAssign/teamScaffold/teamMemoryGarbageCollect`、`roomJoin/roomLeave`：`AppServerActionService` 已实现；UI 部分已接 start/stop/join。
-- [x] `teamBlueprintRepository` 与 `agentDefinitionRepository` 已实现并提交。
+- [x] 删除本地 Team 蓝图与 Agent 定义仓库；协作定义以上游资源与 Action 为准。
 - [x] 删除旧 TeamPage/TeamReducer/TeamTaskView/AgentDefinitionEditor/预设相关 UI。
 
 **验收：** 启动团队 → Roster 出现成员 → 房间可发帖 → 多成员消息按头像/身份分列 → mentions/unread 正确 → markRead 后清零 → agent DM 显示投递状态 → 停止成员后 state 变 stopped → 重启 app 后 resume 恢复房间与成员。
 
 ### P7 · 清理、发布与文档
 
-- [~] 删除 v1 残余：renderer v1（App/chat/team/reducers/tests）与 `vendor/bingo/*.patch` 已删除；旧 main 传输/旧 IPC 仍保留为游戏/工具通道，待下一步拆分后删除。
-- [x] 全量 typecheck/test/build：已通过。
-- [x] 更新 README、architecture、upstream-sync。
-- [ ] 三平台 `npm run package:*` + `verify:package` + 游戏专项 smoke。
-- [ ] 发布候选：记录 bingo commit/tag、schema bundle SHA、协议版本、验证结果。
-- [ ] 更新本文档决策记录为已实施。
+- [x] 删除旧运行链残余：renderer、main transport/session、transcript、旧 IPC/preload/contracts 与对应测试均已移除。
+- [x] 全量 typecheck/test/build：Windows 本地已通过。
+- [x] 更新 README、architecture、upstream-sync、发行与打包文档。
+- [x] Windows `npm run package:win:unpacked` + `verify:package` + packaged 启动冒烟通过；macOS/Linux 原生包待 CI。
+- [x] 发布候选基线记录：Bingo `v0.4.1` / `7bee209`，app-server schema `1.0`；本地验证结果见收尾记录。
+- [x] 更新本文档决策记录与实施状态。
 
-**验收：** `rg "json-events|json_events|protocol v1|protocolVersion" src scripts .github vendor README.md docs` 无 v1 运行时残留（历史文档除外）；三平台包验证通过。
+**验收：** 旧协议关键词仅存在于本文的历史迁移说明；Windows unpacked 本地通过，三平台发行包由 CI 原生 runner 验证。
 
 ---
 
@@ -796,7 +805,7 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 1. **app-server 仍是 experimental**：上游明示无 released consumer、wire 形状不承诺兼容。bingo-go 必须 pin 精确 commit/tag（v0.4.1 = `7bee209`），升级时重跑 schema 漂移与黑盒。
 2. **能力模型变粗**：旧的细粒度 capability 字符串消失。UI 应按 `ServerCapabilities` 布尔面与 `action/list.available` 动态显隐；不要把能力判断重新写成版本号 if。
 3. **Provider/MCP 定义没有 wire 写方法**：本地设置文件写入与 `config/changed` 之间存在一致性窗口。短期用“保存后重连”语义；候选上游扩展 `config/update`（Open-1）。
-4. **Team 蓝图没有 wire 读/写**：GUI 编辑器是 main 的本地文件适配器。需要向上游提案 `team.read`/`team.update` capability（Open-2），或接受“蓝图用文件编辑器维护”。
+4. **协作定义没有 wire 读/写**：旧本地 Team 蓝图编辑器已删除；GUI 只消费官方 resources/actions。可向上游提案定义 CRUD（Open-2），不在客户端恢复第二套模型。
 5. **Team v2 功能有意退役**：lobby、team task 群聊、presets、member profile 在新模型下无等价物。按第 4.8 节映射；若产品要求保留，应作为上游 feature proposal（Open-3）。
 6. **会话列表没有 preview**：`session/list` 只有 title/updatedAt/messageCount/cwd。方案一：列表显示 title + messageCount；方案二：懒加载最近会话的 conversation tail 做 preview；方案三：上游提案 `session/list` 增 preview 字段（Open-4）。
 7. **无 cost 字段**：app-server 的 `TurnUsage` 有 token/cache，但没有 dscode 那样的 cost 估算。若产品需要，向上游提案 `turn/usageUpdated` 扩展（Open-5）。
@@ -814,12 +823,12 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 | BG-2 | 前端以“会话世界”重构：conversation 是第一公民，Chat/Team 统一进 conversations + workspace 两个视图 | 已决策 |
 | BG-3 | Team v2 lobby/tasks/presets 退役，按上游 agents/rooms/tasks/deliveries 重做 | 已决策 |
 | BG-4 | Provider/MCP 定义继续由 Electron main 本地安全写入；运行时选择走 `action/execute` | 已决策 |
-| BG-5 | Team 蓝图与 agent 定义由 main 本地仓库编辑；是否向上游提案 wire CRUD 留待评审 | 已决策 |
+| BG-5 | 删除本地 Team 蓝图与 agent 定义仓库；协作定义只以上游 resources/actions 为准，wire CRUD 留待上游提案 | 已实施 |
 | BG-6 | 删除 `TranscriptRepository`，历史只经 `session/list + conversation/read` | 已决策 |
 | BG-7 | 契约优先、纵向切片：P4 先交付可用对话，P6 交付团队 | 已决策 |
 | BG-8 | 跳过 P0，放弃全部未提交改动，直接大型重构，不保留旧 UI | 已决策 |
 | BG-9 | 交互结构参考 DSCode Desktop（侧栏/对话/Inspector/Composer/命令面板），样式与实现用 antd + Ant Design X | 已决策 |
-| BG-10 | 团队群聊 = Room conversation 的成员角色气泡流；旧 lobby 不保留，蓝图首房间作为“Team 大厅” | 已决策 |
+| BG-10 | 团队群聊 = Room conversation 的成员角色气泡流；旧 lobby 不保留，也不再为房间创建本地别名 | 已实施 |
 | BG-11 | 长列表统一用 `Listy` 虚拟化，`Bubble` 只负责单条语义渲染，避免超长会话卡顿 | 已决策 |
 
 ---

@@ -6,10 +6,11 @@ import type { AppearancePreferencesV1 } from '../../../../shared/contracts/ipc'
 import { useAppearance } from '../../theme/AppearanceProvider'
 
 const PRESETS = [
+  { name: '品牌青绿', value: '#1F8A7A' },
+  { name: '信息蓝', value: '#4C9FD6' },
+  { name: '珊瑚红', value: '#D85C4B' },
   { name: '雾紫', value: '#756AA8' },
   { name: '青绿', value: '#3F7C75' },
-  { name: '蓝灰', value: '#4D6F91' },
-  { name: '森林绿', value: '#557A5B' },
   { name: '石墨', value: '#62666D' }
 ]
 
@@ -20,15 +21,19 @@ export function AppearanceSettings({ onTransactionChange }: { onTransactionChang
   const [draft, setDraft] = useState(appearance.values)
   const [saved, setSaved] = useState(false)
   const [previewDraft, setPreviewDraft] = useState('')
-  useEffect(() => setDraft(appearance.values), [appearance.values])
-  useEffect(() => () => appearance.resetPreview(), [appearance.resetPreview])
+  useEffect(() => {
+    setDraft(appearance.values)
+  }, [appearance.values])
+  useEffect(() => {
+    return () => {
+      appearance.resetPreview()
+    }
+  }, [appearance.resetPreview])
   const update = <K extends keyof AppearancePreferencesV1>(key: K, value: AppearancePreferencesV1[K]): void => {
     setSaved(false)
-    setDraft((current) => {
-      const next = { ...current, [key]: value }
-      appearance.preview(next)
-      return next
-    })
+    const next = { ...draft, [key]: value }
+    setDraft(next)
+    appearance.preview(next)
   }
   const restore = useCallback((): void => {
     setDraft(appearance.values)
@@ -43,11 +48,13 @@ export function AppearanceSettings({ onTransactionChange }: { onTransactionChang
   const dirty = JSON.stringify(draft) !== JSON.stringify(appearance.values)
   useEffect(() => {
     onTransactionChange?.(dirty ? { save, discard: restore } : null)
-    return () => onTransactionChange?.(null)
+    return () => {
+      onTransactionChange?.(null)
+    }
   }, [dirty, onTransactionChange, restore, save])
 
   return <SettingsSectionLayout title="外观" description="Bingo Go 的界面外观独立于 Bingo 终端主题。">
-    {appearance.error && <Alert type="error" showIcon message={appearance.error.code} description={appearance.error.msg} />}
+    {appearance.error && <Alert type="error" showIcon title={appearance.error.code} description={appearance.error.msg} />}
     <div className="settings-form-section">
       <div className="setting-row"><div><strong>颜色模式</strong><span>跟随系统会自动响应 Windows 的明暗模式。</span></div><Segmented value={draft.colorMode} options={[{ label: '跟随系统', value: 'system' }, { label: '明亮', value: 'light' }, { label: '暗色', value: 'dark' }]} onChange={(value) => update('colorMode', value as AppearancePreferencesV1['colorMode'])} /></div>
       <div className="setting-row setting-row-top"><div><strong>主题色</strong><span>用于选中态、主操作和键盘焦点。</span></div><div className="color-controls"><ColorPicker value={draft.accentColor} disabledAlpha showText format="hex" onChange={(color) => update('accentColor', color.toHexString().toUpperCase())} /><div className="color-presets">{PRESETS.map((preset) => <button type="button" key={preset.value} className={`color-swatch${draft.accentColor.toUpperCase() === preset.value ? ' active' : ''}`} style={{ backgroundColor: preset.value }} aria-label={preset.name} title={preset.name} onClick={() => update('accentColor', preset.value)}>{draft.accentColor.toUpperCase() === preset.value && <CheckOutlined />}</button>)}</div></div></div>

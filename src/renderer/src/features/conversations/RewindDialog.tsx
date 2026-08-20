@@ -29,10 +29,10 @@ export function RewindDialog({ open, targetLabel, busy, onPreview, onApply, onCl
     <Modal open={open} onCancel={close} title="回退对话" okText="应用回退" cancelText="取消" confirmLoading={busy}
       okButtonProps={{ disabled: previewed === null }}
       onOk={async () => { if (await onApply()) close() }}>
-      <Space direction="vertical" size={12}>
+      <Space orientation="vertical" size={12}>
         <Typography.Paragraph>将回退到：<strong>{targetLabel}</strong>。先预览会告诉你将移除多少条目。</Typography.Paragraph>
         <Button loading={previewBusy} onClick={() => void preview()}>预览影响</Button>
-        {previewed !== null && <Alert type="warning" showIcon message={`将移除 ${previewed} 个条目。`} />}
+        {previewed !== null && <Alert type="warning" showIcon title={`将移除 ${previewed} 个条目。`} />}
       </Space>
     </Modal>
   )

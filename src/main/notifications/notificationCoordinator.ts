@@ -1,5 +1,5 @@
+import type { AppServerNotification, SessionSnapshot } from '../../shared/contracts/appServer'
 import type { NotificationActivation, NotificationPreferencesV1 } from '../../shared/contracts/ipc'
-import type { ManagedSessionEvent } from '../runtime/sessionManager'
 
 export const TURN_COMPLETED_NOTIFICATION_THRESHOLD_MS = 10_000
 
@@ -39,8 +39,8 @@ const DISABLED_PREFERENCES: NotificationPreferencesV1 = {
 
 export class NotificationCoordinator {
   private preferences = DISABLED_PREFERENCES
-  private connectionId: string | null = null
-  private activeTurn: { turnId: string; startedAt: number } | null = null
+  private sessionId: string | null = null
+  private activeTurns = new Map<string, { conversationId: string; startedAt: number }>()
   private sessionFailureHandled = false
   private readonly now: () => number
 
@@ -60,65 +60,79 @@ export class NotificationCoordinator {
     this.preferences = { ...DISABLED_PREFERENCES }
   }
 
-  handle(event: ManagedSessionEvent): void {
-    this.adoptConnection(event.connectionId)
-    const payload = event.payload
+  handle(snapshot: SessionSnapshot | null, notification: AppServerNotification): void {
+    const eventSessionId = notification.params.event.sessionId
+    this.adoptSession(snapshot?.session.id ?? eventSessionId)
+    const title = displayName(snapshot?.session.title ?? snapshot?.session.cwd ?? '当前对话')
 
-    if (payload.type === 'turn.started') {
-      this.activeTurn = { turnId: payload.turnId, startedAt: this.now() }
+    if (notification.method === 'turn/started') {
+      this.activeTurns.set(notification.params.turn.id, {
+        conversationId: notification.params.conversationId,
+        startedAt: this.now()
+      })
       return
     }
-    if (payload.type === 'turn.completed') {
-      const activeTurn = this.takeTurn(payload.turnId)
-      if (activeTurn && this.now() - activeTurn.startedAt >= TURN_COMPLETED_NOTIFICATION_THRESHOLD_MS) {
-        this.notify('turn-completed', event, '任务已完成', `“${displayName(event.displayName)}”已完成处理。`)
+    if (notification.method === 'turn/completed') {
+      const activeTurn = this.takeTurn(notification.params.turn.id)
+      if (notification.params.turn.status === 'failed') {
+        this.notify('failure', eventSessionId, notification.params.conversationId, '任务运行失败', `“${title}”需要返回 Bingo Go 查看。`)
+        return
+      }
+      if (notification.params.turn.status === 'completed' && activeTurn && this.now() - activeTurn.startedAt >= TURN_COMPLETED_NOTIFICATION_THRESHOLD_MS) {
+        this.notify('turn-completed', eventSessionId, notification.params.conversationId, '任务已完成', `“${title}”已完成处理。`)
       }
       return
     }
-    if (payload.type === 'turn.cancelled') {
-      this.takeTurn(payload.turnId)
+    if (notification.method === 'interaction/opened') {
+      this.notify('action-required', eventSessionId, notification.params.interaction.conversationId, 'Bingo 等待你的处理', `“${title}”需要你的确认或回答。`)
       return
     }
-    if (payload.type === 'prompt.request') {
-      this.notify('action-required', event, 'Bingo 等待你的处理', `“${displayName(event.displayName)}”需要你的确认或回答。`)
+    if (notification.method === 'feedback/raised' && notification.params.feedback.level === 'error') {
+      this.notify('failure', eventSessionId, notification.params.feedback.conversationId ?? undefined, '任务运行失败', `“${title}”需要返回 Bingo Go 查看。`)
       return
     }
-    if (payload.type === 'error' && (payload.scope === 'turn' || payload.scope === 'session')) {
-      if (payload.turnId) this.takeTurn(payload.turnId)
-      if (payload.scope === 'session') this.sessionFailureHandled = true
-      this.notify('failure', event, '任务运行失败', `“${displayName(event.displayName)}”需要返回 Bingo Go 查看。`)
+    if (notification.method === 'operation/completed' && notification.params.operation.status === 'failed') {
+      this.notify('failure', eventSessionId, notification.params.operation.conversationId ?? undefined, '操作执行失败', `“${title}”需要返回 Bingo Go 查看。`)
       return
     }
-    if (payload.type === 'transport.error') {
-      this.activeTurn = null
-      if (this.sessionFailureHandled) return
-      this.sessionFailureHandled = true
-      this.notify('failure', event, '任务运行失败', `“${displayName(event.displayName)}”需要返回 Bingo Go 查看。`)
+    if (notification.method === 'session/closed' || notification.method === 'session/deleted') {
+      this.activeTurns.clear()
     }
   }
 
-  private adoptConnection(connectionId: string): void {
-    if (this.connectionId === connectionId) return
-    this.connectionId = connectionId
-    this.activeTurn = null
+  handleExit(snapshot: SessionSnapshot | null, error: Error | null): void {
+    if (!error) return
+    const sessionId = snapshot?.session.id ?? this.sessionId
+    if (!sessionId) return
+    this.adoptSession(sessionId)
+    this.activeTurns.clear()
+    if (this.sessionFailureHandled) return
+    this.sessionFailureHandled = true
+    const title = displayName(snapshot?.session.title ?? snapshot?.session.cwd ?? '当前对话')
+    this.notify('failure', sessionId, undefined, '运行时连接失败', `“${title}”需要返回 Bingo Go 查看。`)
+  }
+
+  private adoptSession(sessionId: string): void {
+    if (this.sessionId === sessionId) return
+    this.sessionId = sessionId
+    this.activeTurns.clear()
     this.sessionFailureHandled = false
   }
 
-  private takeTurn(turnId: string): { turnId: string; startedAt: number } | null {
-    if (this.activeTurn?.turnId !== turnId) return null
-    const activeTurn = this.activeTurn
-    this.activeTurn = null
+  private takeTurn(turnId: string): { conversationId: string; startedAt: number } | null {
+    const activeTurn = this.activeTurns.get(turnId) ?? null
+    this.activeTurns.delete(turnId)
     return activeTurn
   }
 
-  private notify(kind: NotificationActivation['kind'], event: ManagedSessionEvent, title: string, body: string): void {
+  private notify(kind: NotificationActivation['kind'], sessionId: string, conversationId: string | undefined, title: string, body: string): void {
     if (!this.shouldNotify(kind)) return
     try {
       const notification = this.dependencies.createNotification({ title, body, silent: !this.preferences.sound })
-      notification.on('click', () => this.activate(event.connectionId, kind))
+      notification.on('click', () => this.activate({ sessionId, ...(conversationId ? { conversationId } : {}), kind }))
       notification.show()
     } catch {
-      // Native notification failures must not affect the session event stream.
+      // Native notification failures must not affect the app-server event stream.
     }
   }
 
@@ -135,13 +149,13 @@ export class NotificationCoordinator {
     return !window.isVisible() || window.isMinimized() || !window.isFocused()
   }
 
-  private activate(connectionId: string, kind: NotificationActivation['kind']): void {
+  private activate(event: NotificationActivation): void {
     const window = this.dependencies.window
     if (window.isDestroyed()) return
     if (window.isMinimized()) window.restore()
     if (!window.isVisible()) window.show()
     window.focus()
-    this.dependencies.activate({ connectionId, kind })
+    this.dependencies.activate(event)
   }
 }
 

@@ -161,18 +161,26 @@ export function applyNotification(state: AppStore, notification: AppServerNotifi
     case 'turn/started':
       next.turns.set(notification.params.turn.id, notification.params.turn)
       break
-    case 'turn/roundStarted':
-    case 'turn/roundCompleted':
-      next.turns.delete(notification.params.turnId)
+    case 'turn/roundStarted': {
+      const active = next.turns.get(notification.params.turnId)
+      if (active) next.turns.set(active.id, { ...active, round: notification.params.round })
       break
+    }
+    case 'turn/roundCompleted': {
+      const active = next.turns.get(notification.params.turnId)
+      if (active) next.turns.set(active.id, { ...active, round: notification.params.round, usage: notification.params.usage ?? active.usage })
+      break
+    }
     case 'turn/retrying':
       withdrawItems(next, notification.params.conversationId, notification.params.removedItemIds)
       break
     case 'turn/usageUpdated': {
       const transcript = next.transcripts.get(notification.params.conversationId)
-      if (transcript?.contextUsage && notification.params.contextUsage) {
+      if (transcript && notification.params.contextUsage) {
         next.transcripts.set(notification.params.conversationId, { ...transcript, contextUsage: notification.params.contextUsage })
       }
+      const active = next.turns.get(notification.params.turnId)
+      if (active) next.turns.set(active.id, { ...active, usage: notification.params.usage })
       break
     }
     case 'turn/completed':

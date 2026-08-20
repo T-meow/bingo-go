@@ -16,8 +16,7 @@ export type SettingsFileSnapshot = Omit<SettingsSnapshot, 'providers'> & {
 const MISSING_REVISION = createHash('sha256').update('').digest('hex')
 const EDITABLE_KEYS: Array<keyof EditableSettings> = [
   'apiBaseUrl', 'provider', 'model', 'thinkingLevel', 'permissionMode', 'theme', 'motion',
-  'sendImages', 'cacheControl', 'respondToBashCommands', 'shell', 'permissions', 'team',
-  'experimental', 'share'
+  'sendImages', 'cacheControl', 'respondToBashCommands', 'shell', 'permissions', 'share'
 ]
 const SCALAR_KEYS: Array<keyof EditableSettings> = [
   'apiBaseUrl', 'provider', 'model', 'thinkingLevel', 'permissionMode', 'theme', 'motion',
@@ -44,8 +43,6 @@ export class SettingsRepository {
     const values: EditableSettings = {
       ...effective,
       permissions: permissionRules(user.object.permissions),
-      experimental: experimentalSettings(user.object.experimental, effective.experimental),
-      team: teamSettings(user.object.team, effective.team),
       share: shareSettings(user.object.share, effective.share)
     }
     const sources: SettingsFileSnapshot['sources'] = {}
@@ -235,15 +232,7 @@ function mergeLayers(layers: Layer[]): JsonObject {
       ask: [...basePermissions.ask, ...permissions.ask],
       deny: [...basePermissions.deny, ...permissions.deny]
     }
-    const experimental = objectValue(layer.object.experimental)
-    const baseExperimental = objectValue(merged.experimental)
-    merged.experimental = {
-      ...baseExperimental,
-      ...(experimental.channelMessageLimit !== undefined ? { channelMessageLimit: experimental.channelMessageLimit } : {}),
-      ...(experimental.agentMessageLimit !== undefined ? { agentMessageLimit: experimental.agentMessageLimit } : {}),
-      agentChannels: Boolean(baseExperimental.agentChannels) || Boolean(experimental.agentChannels)
-    }
-    for (const key of ['team', 'share'] as const) {
+    for (const key of ['share'] as const) {
       const value = objectValue(layer.object[key])
       if (Object.keys(value).length > 0) merged[key] = { ...objectValue(merged[key]), ...value }
     }
@@ -272,8 +261,6 @@ function editableValues(raw: JsonObject): EditableSettings {
     respondToBashCommands: booleanValue(raw.respondToBashCommands, true),
     shell: stringValue(raw.shell),
     permissions: permissionRules(raw.permissions),
-    team: teamSettings(raw.team, { autoStart: true }),
-    experimental: experimentalSettings(raw.experimental, { agentChannels: false, channelMessageLimit: 500, agentMessageLimit: 50 }),
     share: shareSettings(raw.share, { baseUrl: 'https://bingo.ruobin.dev' })
   }
 }
@@ -292,15 +279,13 @@ function serializeEditable(values: EditableSettings): JsonObject {
     respondToBashCommands: values.respondToBashCommands,
     shell: values.shell,
     permissions: values.permissions,
-    team: values.team,
-    experimental: values.experimental,
     share: values.share
   }
 }
 
 function mergeForWrite(current: JsonObject, patch: JsonObject): JsonObject {
   const next = { ...current, ...patch }
-  for (const key of ['permissions', 'team', 'experimental', 'share'] as const) {
+  for (const key of ['permissions', 'share'] as const) {
     if (isObject(patch[key])) next[key] = { ...objectValue(current[key]), ...patch[key] }
   }
   return next
@@ -357,20 +342,6 @@ function permissionRules(value: unknown): EditableSettings['permissions'] {
   return { allow: stringArray(object.allow), ask: stringArray(object.ask), deny: stringArray(object.deny) }
 }
 
-function teamSettings(value: unknown, fallback: EditableSettings['team']): EditableSettings['team'] {
-  const object = objectValue(value)
-  return { autoStart: booleanValue(object.autoStart, fallback.autoStart) }
-}
-
-function experimentalSettings(value: unknown, fallback: EditableSettings['experimental']): EditableSettings['experimental'] {
-  const object = objectValue(value)
-  return {
-    agentChannels: booleanValue(object.agentChannels, fallback.agentChannels),
-    channelMessageLimit: positiveInteger(object.channelMessageLimit, fallback.channelMessageLimit),
-    agentMessageLimit: positiveInteger(object.agentMessageLimit, fallback.agentMessageLimit)
-  }
-}
-
 function shareSettings(value: unknown, fallback: EditableSettings['share']): EditableSettings['share'] {
   return { baseUrl: stringValue(objectValue(value).baseUrl, fallback.baseUrl) }
 }
@@ -392,7 +363,6 @@ function stringArray(value: unknown): string[] { return Array.isArray(value) ? v
 function isObject(value: unknown): value is JsonObject { return typeof value === 'object' && value !== null && !Array.isArray(value) }
 function stringValue(value: unknown, fallback = ''): string { return typeof value === 'string' ? value : fallback }
 function booleanValue(value: unknown, fallback: boolean): boolean { return typeof value === 'boolean' ? value : fallback }
-function positiveInteger(value: unknown, fallback: number): number { return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback }
 function thinkingValue(value: unknown): EditableSettings['thinkingLevel'] { return ['off', 'low', 'medium', 'high', 'xhigh', 'max'].includes(String(value)) ? value as EditableSettings['thinkingLevel'] : 'off' }
 function permissionMode(value: unknown): EditableSettings['permissionMode'] { return ['default', 'acceptEdits', 'plan', 'dontAsk', 'bypassPermissions'].includes(String(value)) ? value as EditableSettings['permissionMode'] : 'default' }
 function themeValue(value: unknown): EditableSettings['theme'] { return value === 'dark' || value === 'light' ? value : 'auto' }

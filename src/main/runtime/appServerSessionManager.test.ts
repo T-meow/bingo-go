@@ -20,7 +20,9 @@ async function scenario(): Promise<string> {
       'session/start': { result: { snapshot } },
       'session/read': { result: { snapshot } },
       'conversation/read': { result: { snapshot: { conversation: { id: 'conv_main' }, items: { items: [], revision: 1 }, queue: { items: [], revision: 1 }, interactions: [], historyGeneration: 1, eventCursor: 2 } } },
-      'conversation/submit': { result: { disposition: { type: 'turnStarted', turnId: 'turn_1' } } }
+      'conversation/submit': { result: { disposition: { type: 'turnStarted', turnId: 'turn_1' } } },
+      'turn/interrupt': { result: { accepted: true, turnId: 'turn_1' } },
+      'session/close': { result: { sessionId: 'sess_1' } }
     },
     notifications: [{ method: 'session/updated', params: { session: { id: 'sess_1', epoch: 'epoch_1' } } }]
   }))
@@ -38,6 +40,7 @@ describe('AppServerSessionManager', () => {
     await manager.conversationRead({ conversationId: 'conv_main' })
     expect(handlers.onNotification).toHaveBeenCalledWith(expect.objectContaining({ method: 'session/updated' }))
     await expect(manager.composerSubmit('conv_main', 'hello')).resolves.toMatchObject({ disposition: { type: 'turnStarted' } })
+    await expect(manager.turnInterrupt({ conversationId: 'conv_main', turnId: 'turn_1' })).resolves.toEqual({ accepted: true, turnId: 'turn_1' })
     await expect(manager.sessionRead()).resolves.toMatchObject({ session: { epoch: 'epoch_1' } })
     await manager.close()
   })

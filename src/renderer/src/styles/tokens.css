@@ -1,0 +1,95 @@
+:root {
+  --rei-accent: #1f8a7a;
+  --rei-bg: #f3f6f5;
+  --rei-surface: #ffffff;
+  --rei-surface-subtle: #eef2f0;
+  --rei-surface-hover: #e7eeeb;
+  --rei-border: #dde5e2;
+  --rei-border-strong: #c5d1cd;
+  --rei-text: #1e2724;
+  --rei-text-secondary: #5e6a66;
+  --rei-text-tertiary: #7c8984;
+  --rei-on-accent: #ffffff;
+  --rei-danger: #d85c4b;
+  --rei-success: #318463;
+  --rei-info: #3e88bc;
+  --rei-warning: #b67622;
+  --workbench-row-height: 56px;
+  --workbench-page-gutter: 32px;
+  color: var(--rei-text);
+  background: var(--rei-bg);
+  font-family: Inter, "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+}
+
+[data-theme='dark'] {
+  --rei-bg: #151a19;
+  --rei-surface: #1d2321;
+  --rei-surface-subtle: #252d2a;
+  --rei-surface-hover: #2c3632;
+  --rei-border: #35403c;
+  --rei-border-strong: #4b5954;
+  --rei-text: #edf3f0;
+  --rei-text-secondary: #aeb9b5;
+  --rei-text-tertiary: #899690;
+  --rei-danger: #ed7768;
+  --rei-success: #61b18d;
+  --rei-info: #65a9d6;
+  --rei-warning: #dda657;
+}
+
+[data-density='compact'] {
+  --workbench-row-height: 48px;
+  --workbench-page-gutter: 24px;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  letter-spacing: 0;
+}
+
+body {
+  color: var(--rei-text);
+  background: var(--rei-bg);
+}
+
+:where(button, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--rei-accent) 62%, white 8%);
+  outline-offset: 2px;
+}
+
+.rei-ant-app {
+  color: var(--rei-text);
+  background: var(--rei-bg);
+}
+
+.rei-ant-app .ant-btn,
+.rei-ant-app .ant-input,
+.rei-ant-app .ant-select,
+.rei-ant-app .ant-tag,
+.rei-ant-app .ant-menu,
+.rei-ant-app .ant-table,
+.rei-ant-app .ant-alert,
+.rei-ant-app .ant-modal,
+.rei-ant-app .ant-drawer {
+  letter-spacing: 0;
+}
+
+.rei-ant-app .ant-tag {
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.rei-ant-app .ant-alert,
+.rei-ant-app .ant-modal-content,
+.rei-ant-app .ant-drawer-content,
+.rei-ant-app .ant-popover-inner {
+  border-radius: 8px;
+}
+
+@media (max-width: 980px) {
+  :root { --workbench-page-gutter: 22px; }
+}

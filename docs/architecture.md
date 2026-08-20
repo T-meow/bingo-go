@@ -1,6 +1,6 @@
 # Bingo Go 当前架构
 
-本文档记录 app-server 重构后的当前实现边界。旧 protocol v1 NDJSON 前端已移除。
+本文档记录 app-server 重构后的当前实现边界。旧自定义 NDJSON 前端已移除。
 
 ## 系统边界
 
@@ -31,16 +31,18 @@ bingo app-server（官方 v0.4.1，未修改）
 - `appServerAssetService.ts`：asset 注册与分块读取。
 - `appServerSettingsAdapter.ts`：运行时选择与定义写后重载。
 - `registerAppServerIpc.ts`：app-server 专用 IPC 面。
-- `teamBlueprintRepository.ts`、`agentDefinitionRepository.ts`：项目团队蓝图与 Agent Markdown 定义的 revision 安全读写。
+- `registerHostIpc.ts`：工作区、设置、外观、通知、资料和游戏等本机 IPC 面。
+- `settingsRepository.ts`：Provider/MCP 定义的 revision 安全读写；不保存会话或协作运行态。
 
 ## Renderer 模块
 
 - `store/appStore.ts`：客户端 reducer。原子快照 + 有序事件流，item 分为 log/live，队列、交互、操作、资源集合均为替换式更新；seq 有洞触发 desync 重读。
-- `AppV2.tsx`：新应用入口，会话/团队/设置三视图。
+- `AppV2.tsx`：应用入口，从持久化工作区启动 app-server，并协调会话、协作和设置视图。
 - `AppShellV2`：Layout + Splitter 四区骨架。
 - `ConversationCanvas` / `ItemRenderer` / `Composer` / `InteractionCard` / `ContextPanel` / `TurnGroup`：统一会话画布。
-- `WorkspacePage`：Roster/Rooms/Tasks/Deliveries 团队工作台。
-- `AppServerSettingsView`：catalog/config 驱动的设置视图。
+- `ConversationSidebar`：当前 session 的 conversations 与历史 session 列表。
+- `WorkspacePage`：Roster/Rooms/Tasks/Deliveries 协作工作台。
+- `AppServerSettingsView`：catalog/config 驱动的运行时设置，以及本机 Provider/MCP、外观、通知、资料和游戏设置。
 
 ## Wire 协议
 
@@ -59,7 +61,7 @@ bingo app-server
 - Renderer 启用 sandbox 和 context isolation，不拥有 Node.js、Shell、原始 IPC 或任意文件系统访问。
 - Preload 只暴露显式类型化 API；main 校验 payload、调用来源、路径和运行状态。
 - Bingo 是 transcript 的唯一写入者。
-- API Key 不进入 renderer 持久状态、Team 蓝图、任务记录、游戏包或团队预设。
+- API Key 不进入 renderer 持久状态、会话记录或游戏包。
 - 小游戏使用独立窗口、持久化分区和自定义协议；没有 preload、Node/Electron API、下载、弹窗或网络访问。
 - 本地打包包含相邻 Bingo 工作树当前已保存的代码，发布前检查来源和 Git 状态。
 

@@ -66,11 +66,11 @@ export function ProfileSettings({ onTransactionChange }: { onTransactionChange?:
   const error = localError ?? profile.error?.msg
   const currentTitle = useMemo(() => avatar.startsWith('user:') || avatar === 'pending-upload' ? '自定义头像' : avatar, [avatar])
 
-  return <SettingsSectionLayout title="个人资料" description="设置你在 Team 大厅、任务和频道中的头像。">
-    {error && <Alert type="error" showIcon message="头像不可用" description={error} />}
+  return <SettingsSectionLayout title="个人资料" description="设置你在 Bingo Go 本地界面和协作会话中的头像。">
+    {error && <Alert type="error" showIcon title="头像不可用" description={error} />}
     <div className="profile-avatar-hero">
       <IdentityAvatar avatar={avatar} avatarDataUrl={avatarDataUrl} identity="user" size={88} />
-      <div><strong>{currentTitle || '正在读取'}</strong><span>头像只保存在本机，不会写入项目或团队预设。</span></div>
+      <div><strong>{currentTitle || '正在读取'}</strong><span>头像只保存在本机，不会写入项目配置。</span></div>
     </div>
     <AvatarPicker value={avatar} identity="user" disabled={!profile.snapshot || profile.saving} allowUpload onChange={choose} onUpload={(file) => void upload(file)} onRandom={random} />
     <Space className="settings-actions">
