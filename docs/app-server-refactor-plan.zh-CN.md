@@ -707,7 +707,7 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 - [x] `AppServerInspector`：session 前 `catalog/read`（providers/models/skills/images/mcpServers）；文件 `src/main/runtime/appServerInspector.ts`。
 - [x] `AppServerSession` 高层请求 facade；文件 `src/main/runtime/appServerSession.ts`。
 - [x] `RuntimeLocator.probe`：`bingo --version` + app-server initialize/shutdown；`RuntimeInfo` 增加 `appServer` 字段，旧字段保留到 P3 替换。
-- [ ] `SessionManager` 的 `connectionId/epoch/snapshot` 骨架：留到 P3（不提前拆旧 SessionManager）。
+- [x] `AppServerSessionManager`：独立于旧 SessionManager 的 connection/epoch/snapshot + desync 重读骨架已实现（`appServerSessionManager.ts`），旧 SessionManager 留到主入口切换时替换。
 - [x] 更新打包脚本与 CI：pin `7bee209`、去掉 patch、`verify:package` 用 initialize 探测、package job 增加 schema 漂移校验；文件 `scripts/bingo-package-lib.mjs`、`.github/workflows/ci.yml`。
 - [x] 测试：`appServerConnection.test.ts`（initialize/correlation/error map/seq gap/帧超限 5 例）、`appServerInspector.test.ts`（2 例）、`runtimeLocator.test.ts` 重写（4 例）、`appServerSchemaFixtures.test.ts`（manifest 全覆盖）。
 
@@ -718,7 +718,7 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 - [x] `appStore` + selectors + resync 逻辑：`appStore.ts`（快照/事件 reducer、log/live/tail/queue/collections）、`useAppStore.ts`；连接层 seq 洞触发 `desynchronized`。
 - [x] `AppShellV2`（Layout + Splitter + Nav Rail + Drawer 窄屏适配），组件已就绪，待主入口切换。
 - [x] `CommandPalette`（action/list 数据 + 过滤/可用态），组件已就绪。
-- [x] 新会话/恢复/列表：`AppServerSession.sessionStart/resume/list/read/close/delete` 已实现并有 fake-server 测试；尚未接 IPC。
+- [x] 新会话/恢复/列表：`AppServerSession` facade 与 `AppServerSessionManager.start/resume/sessionList/sessionRead` 已实现并有 fake-server 测试；尚未接 IPC。
 - [x] `conversation/list`、`conversation/read`、`conversation/markRead`：同上，facade 已实现。
 - [x] `ConversationSidebar`（Main/Agents/Rooms 分组，unread/mentions/runState/queueCount Badge），组件已就绪。
 - [ ] `NotificationCoordinator` 迁移 turn/interaction/feedback：留到主入口切换阶段。
