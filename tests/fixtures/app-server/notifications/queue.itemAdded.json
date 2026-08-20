@@ -1,0 +1,24 @@
+{
+  "jsonrpc": "2.0",
+  "method": "queue/itemAdded",
+  "params": {
+    "conversationId": "string",
+    "entry": {
+      "attachments": [
+        "string"
+      ],
+      "id": "string",
+      "originConversationId": "string",
+      "queuedAt": 0,
+      "steerEligible": false,
+      "text": "string"
+    },
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "position": 0,
+    "revision": 0
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "feedback/raised",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "feedback": {
+      "code": "string",
+      "id": "string",
+      "level": "info",
+      "message": "string",
+      "raisedAt": 0
+    }
+  }
+}

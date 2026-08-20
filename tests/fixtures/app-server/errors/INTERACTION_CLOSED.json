@@ -1,0 +1,9 @@
+{
+  "code": -32014,
+  "message": "The interaction is already resolved.",
+  "data": {
+    "bingoCode": "INTERACTION_CLOSED",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

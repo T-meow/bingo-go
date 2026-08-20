@@ -1,0 +1,27 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "actions": [
+      {
+        "arguments": [
+          {
+            "choices": [
+              "string"
+            ],
+            "description": "string",
+            "kind": "string",
+            "name": "string",
+            "required": false
+          }
+        ],
+        "available": false,
+        "description": "string",
+        "family": "session",
+        "id": "string",
+        "label": "string"
+      }
+    ],
+    "revision": 0
+  }
+}

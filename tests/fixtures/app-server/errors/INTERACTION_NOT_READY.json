@@ -1,0 +1,9 @@
+{
+  "code": -32013,
+  "message": "The confirmation guard has not elapsed.",
+  "data": {
+    "bingoCode": "INTERACTION_NOT_READY",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

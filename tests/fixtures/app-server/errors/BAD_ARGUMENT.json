@@ -1,0 +1,9 @@
+{
+  "code": -32602,
+  "message": "The request arguments are invalid.",
+  "data": {
+    "bingoCode": "BAD_ARGUMENT",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

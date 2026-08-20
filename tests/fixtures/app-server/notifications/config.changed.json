@@ -1,0 +1,45 @@
+{
+  "jsonrpc": "2.0",
+  "method": "config/changed",
+  "params": {
+    "config": {
+      "cwd": "string",
+      "layers": [
+        {
+          "keys": [
+            "string"
+          ],
+          "path": "string"
+        }
+      ],
+      "mcpServers": [
+        {
+          "enabled": false,
+          "name": "string",
+          "status": "connecting",
+          "tools": 0
+        }
+      ],
+      "model": "string",
+      "permissionMode": "default",
+      "permissions": [
+        {
+          "decision": "allow",
+          "rule": "string",
+          "sessionScoped": false
+        }
+      ],
+      "provider": "string",
+      "revision": 0,
+      "shell": "string",
+      "shellDialect": "posix",
+      "theme": "auto",
+      "thinking": "off"
+    },
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    }
+  }
+}

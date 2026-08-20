@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "asset": {
+      "bytes": 0,
+      "createdAt": 0,
+      "id": "string",
+      "kind": "image",
+      "mime": "string",
+      "origin": "session",
+      "sha256": "string"
+    }
+  }
+}

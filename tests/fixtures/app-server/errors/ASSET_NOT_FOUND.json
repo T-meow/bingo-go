@@ -1,0 +1,9 @@
+{
+  "code": -32017,
+  "message": "The asset does not exist.",
+  "data": {
+    "bingoCode": "ASSET_NOT_FOUND",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

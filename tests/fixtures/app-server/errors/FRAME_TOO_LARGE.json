@@ -1,0 +1,9 @@
+{
+  "code": -32019,
+  "message": "The frame exceeds the negotiated size limit.",
+  "data": {
+    "bingoCode": "FRAME_TOO_LARGE",
+    "recoverable": false,
+    "scope": "connection"
+  }
+}

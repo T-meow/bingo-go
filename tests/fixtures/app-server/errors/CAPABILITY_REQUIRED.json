@@ -1,0 +1,9 @@
+{
+  "code": -32002,
+  "message": "A controlling client must support interaction/respond.",
+  "data": {
+    "bingoCode": "CAPABILITY_REQUIRED",
+    "recoverable": false,
+    "scope": "connection"
+  }
+}

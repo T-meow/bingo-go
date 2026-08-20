@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "method": "conversation/removed",
+  "params": {
+    "conversationId": "string",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "code": -32018,
+  "message": "The file could not be registered as an asset.",
+  "data": {
+    "bingoCode": "ASSET_REJECTED",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "initialize",
+  "params": {
+    "capabilities": {
+      "interactionResponse": false
+    },
+    "client": {
+      "name": "string",
+      "version": "string"
+    },
+    "protocol": {
+      "major": 0,
+      "maxMinor": 0,
+      "minMinor": 0
+    }
+  }
+}

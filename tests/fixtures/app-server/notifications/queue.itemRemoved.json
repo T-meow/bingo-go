@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "method": "queue/itemRemoved",
+  "params": {
+    "conversationId": "string",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "queueId": "string",
+    "reason": "drained",
+    "revision": 0
+  }
+}

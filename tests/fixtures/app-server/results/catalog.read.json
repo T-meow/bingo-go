@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "catalog": {
+      "catalog": "models",
+      "items": [
+        {
+          "id": "string",
+          "provider": "string",
+          "supportsImages": false,
+          "supportsThinking": false
+        }
+      ],
+      "revision": 0
+    }
+  }
+}

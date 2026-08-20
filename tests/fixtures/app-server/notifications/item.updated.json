@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "method": "item/updated",
+  "params": {
+    "conversationId": "string",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "item": {
+      "attachments": [
+        "string"
+      ],
+      "text": "string",
+      "type": "userMessage"
+    }
+  }
+}

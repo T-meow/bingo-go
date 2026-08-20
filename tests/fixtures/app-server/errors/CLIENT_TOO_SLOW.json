@@ -1,0 +1,9 @@
+{
+  "code": -32020,
+  "message": "The client is not reading fast enough to stay attached.",
+  "data": {
+    "bingoCode": "CLIENT_TOO_SLOW",
+    "recoverable": false,
+    "scope": "connection"
+  }
+}

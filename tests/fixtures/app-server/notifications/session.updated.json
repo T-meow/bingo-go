@@ -1,0 +1,28 @@
+{
+  "jsonrpc": "2.0",
+  "method": "session/updated",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "session": {
+      "createdAt": 0,
+      "cwd": "string",
+      "epoch": "string",
+      "id": "string",
+      "locator": {
+        "type": "latest"
+      },
+      "model": "string",
+      "permissionMode": "default",
+      "provider": "string",
+      "resumed": false,
+      "state": "active",
+      "thinking": "off",
+      "title": "string",
+      "updatedAt": 0
+    }
+  }
+}

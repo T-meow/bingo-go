@@ -1,0 +1,22 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "count": 0,
+    "entries": {
+      "items": [
+        {
+          "attachments": [
+            "string"
+          ],
+          "id": "string",
+          "originConversationId": "string",
+          "queuedAt": 0,
+          "steerEligible": false,
+          "text": "string"
+        }
+      ],
+      "revision": 0
+    }
+  }
+}

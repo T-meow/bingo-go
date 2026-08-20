@@ -1,0 +1,9 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "data": "string",
+    "eof": false,
+    "nextOffset": 0
+  }
+}

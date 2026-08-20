@@ -1,0 +1,20 @@
+{
+  "jsonrpc": "2.0",
+  "method": "turn/usageUpdated",
+  "params": {
+    "conversationId": "string",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "turnId": "string",
+    "usage": {
+      "authoritative": false,
+      "cacheReadTokens": 0,
+      "cacheWriteTokens": 0,
+      "inputTokens": 0,
+      "outputTokens": 0
+    }
+  }
+}

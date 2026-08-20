@@ -1,0 +1,12 @@
+{
+  "jsonrpc": "2.0",
+  "method": "feedback/cleared",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "feedbackId": "string"
+  }
+}

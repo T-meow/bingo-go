@@ -1,0 +1,79 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "snapshot": {
+      "conversation": {
+        "historyGeneration": 0,
+        "id": "string",
+        "isMember": false,
+        "kind": {
+          "type": "main"
+        },
+        "mentions": 0,
+        "obligations": [
+          {
+            "kind": "mentionDebt",
+            "since": 0
+          }
+        ],
+        "pendingInteractions": 0,
+        "queueCount": 0,
+        "queueRevision": 0,
+        "revision": 0,
+        "runState": "idle",
+        "title": "string",
+        "unread": 0
+      },
+      "eventCursor": 0,
+      "historyGeneration": 0,
+      "interactions": [
+        {
+          "conversationId": "string",
+          "id": "string",
+          "openedAt": 0,
+          "prompt": {
+            "allowsFeedback": false,
+            "decisions": [
+              "allowOnce"
+            ],
+            "title": "string",
+            "tool": {
+              "input": {},
+              "name": "string"
+            },
+            "type": "permission"
+          },
+          "remainingGuardMs": 0
+        }
+      ],
+      "items": {
+        "items": [
+          {
+            "attachments": [
+              "string"
+            ],
+            "text": "string",
+            "type": "userMessage"
+          }
+        ],
+        "revision": 0
+      },
+      "queue": {
+        "items": [
+          {
+            "attachments": [
+              "string"
+            ],
+            "id": "string",
+            "originConversationId": "string",
+            "queuedAt": 0,
+            "steerEligible": false,
+            "text": "string"
+          }
+        ],
+        "revision": 0
+      }
+    }
+  }
+}

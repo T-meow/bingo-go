@@ -1,0 +1,9 @@
+{
+  "code": -32004,
+  "message": "The connection is already initialized.",
+  "data": {
+    "bingoCode": "ALREADY_INITIALIZED",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

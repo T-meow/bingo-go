@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "method": "interaction/resolved",
+  "params": {
+    "conversationId": "string",
+    "decision": {
+      "type": "allowOnce"
+    },
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "interactionId": "string"
+  }
+}

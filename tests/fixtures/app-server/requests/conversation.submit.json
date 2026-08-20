@@ -1,0 +1,16 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "conversation/submit",
+  "params": {
+    "conversationId": "string",
+    "input": {
+      "attachments": [
+        "string"
+      ],
+      "mode": "normal",
+      "text": "string",
+      "type": "composer"
+    }
+  }
+}

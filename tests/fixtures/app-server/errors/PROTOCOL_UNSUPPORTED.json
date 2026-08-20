@@ -1,0 +1,9 @@
+{
+  "code": -32001,
+  "message": "This server does not speak the requested protocol major.",
+  "data": {
+    "bingoCode": "PROTOCOL_UNSUPPORTED",
+    "recoverable": false,
+    "scope": "connection"
+  }
+}

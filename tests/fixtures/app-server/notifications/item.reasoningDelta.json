@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "method": "item/reasoningDelta",
+  "params": {
+    "conversationId": "string",
+    "delta": "string",
+    "deltaSeq": 0,
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "itemId": "string"
+  }
+}

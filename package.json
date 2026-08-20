@@ -26,7 +26,10 @@
     "verify:avatars": "node scripts/verify-avatar-assets.mjs",
     "smoke:package:games": "node scripts/smoke-packaged-games.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:app-server-types": "node scripts/generate-app-server-types.mjs",
+    "generate:app-server-fixtures": "node scripts/generate-app-server-fixtures.mjs",
+    "verify:app-server-schema": "node scripts/verify-app-server-schema.mjs"
   },
   "dependencies": {
     "write-file-atomic": "^6.0.0",

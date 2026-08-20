@@ -1,0 +1,33 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "conversations": {
+      "items": [
+        {
+          "historyGeneration": 0,
+          "id": "string",
+          "isMember": false,
+          "kind": {
+            "type": "main"
+          },
+          "mentions": 0,
+          "obligations": [
+            {
+              "kind": "mentionDebt",
+              "since": 0
+            }
+          ],
+          "pendingInteractions": 0,
+          "queueCount": 0,
+          "queueRevision": 0,
+          "revision": 0,
+          "runState": "idle",
+          "title": "string",
+          "unread": 0
+        }
+      ],
+      "revision": 0
+    }
+  }
+}

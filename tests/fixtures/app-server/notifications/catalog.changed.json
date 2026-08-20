@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "method": "catalog/changed",
+  "params": {
+    "catalog": "models",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "revision": 0
+  }
+}

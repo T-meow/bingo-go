@@ -1,0 +1,24 @@
+{
+  "jsonrpc": "2.0",
+  "method": "room/changed",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "room": {
+      "id": "string",
+      "lastSeq": 0,
+      "members": [
+        "string"
+      ],
+      "mentions": 0,
+      "messageCount": 0,
+      "mode": "broadcast",
+      "name": "string",
+      "unread": 0,
+      "userIsMember": false
+    }
+  }
+}

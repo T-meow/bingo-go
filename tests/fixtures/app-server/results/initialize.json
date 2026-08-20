@@ -1,0 +1,34 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "capabilities": {
+      "images": false,
+      "multiConversation": false,
+      "reasoning": false,
+      "rooms": false,
+      "shell": false,
+      "teams": false
+    },
+    "limits": {
+      "maxClientFrameBytes": 0,
+      "maxServerFrameBytes": 0
+    },
+    "protocol": {
+      "major": 0,
+      "minor": 0
+    },
+    "server": {
+      "epoch": {
+        "0": "s",
+        "1": "t",
+        "2": "r",
+        "3": "i",
+        "4": "n",
+        "5": "g"
+      },
+      "name": "string",
+      "version": "string"
+    }
+  }
+}

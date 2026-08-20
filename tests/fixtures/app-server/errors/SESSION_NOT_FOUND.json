@@ -1,0 +1,9 @@
+{
+  "code": -32006,
+  "message": "No session matches that locator.",
+  "data": {
+    "bingoCode": "SESSION_NOT_FOUND",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

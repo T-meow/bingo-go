@@ -1,0 +1,9 @@
+{
+  "code": -32016,
+  "message": "The action is not available in this state.",
+  "data": {
+    "bingoCode": "ACTION_UNAVAILABLE",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

@@ -1,0 +1,249 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "snapshot": {
+      "activeTurns": [
+        {
+          "conversationId": "string",
+          "id": "string",
+          "inputItemIds": [
+            "string"
+          ],
+          "origin": "user",
+          "round": 0,
+          "startedAt": 0,
+          "status": "running"
+        }
+      ],
+      "capabilities": {
+        "images": false,
+        "multiConversation": false,
+        "reasoning": false,
+        "rooms": false,
+        "shell": false,
+        "teams": false
+      },
+      "collections": {
+        "agents": {
+          "active": [
+            {
+              "cwd": "string",
+              "description": "string",
+              "id": "string",
+              "kind": "crew",
+              "lastActiveAt": 0,
+              "model": "string",
+              "name": "string",
+              "outputTokens": 0,
+              "pending": 0,
+              "prompt": "string",
+              "provider": "string",
+              "recentActivity": [
+                "string"
+              ],
+              "state": "running",
+              "thinking": "off",
+              "toolUses": 0,
+              "unacked": 0
+            }
+          ],
+          "count": 0,
+          "revision": 0
+        },
+        "backgroundCommands": {
+          "active": [
+            {
+              "command": "string",
+              "durationMs": 0,
+              "id": "string",
+              "label": "string",
+              "startedAt": 0,
+              "state": "running"
+            }
+          ],
+          "count": 0,
+          "revision": 0
+        },
+        "deliveries": {
+          "active": [
+            {
+              "followUps": 0,
+              "from": "string",
+              "id": "string",
+              "maxFollowUps": 0,
+              "private": false,
+              "state": "queued",
+              "to": "string",
+              "updatedAt": 0
+            }
+          ],
+          "count": 0,
+          "revision": 0
+        },
+        "mcpServers": [
+          {
+            "enabled": false,
+            "name": "string",
+            "status": "connecting",
+            "tools": 0
+          }
+        ],
+        "rooms": {
+          "active": [
+            {
+              "id": "string",
+              "lastSeq": 0,
+              "members": [
+                "string"
+              ],
+              "mentions": 0,
+              "messageCount": 0,
+              "mode": "broadcast",
+              "name": "string",
+              "unread": 0,
+              "userIsMember": false
+            }
+          ],
+          "count": 0,
+          "revision": 0
+        },
+        "tasks": {
+          "active": [
+            {
+              "blockedBy": [
+                "string"
+              ],
+              "blocks": [
+                "string"
+              ],
+              "description": "string",
+              "id": "string",
+              "status": "pending",
+              "subject": "string"
+            }
+          ],
+          "count": 0,
+          "revision": 0
+        }
+      },
+      "config": {
+        "cwd": "string",
+        "layers": [
+          {
+            "keys": [
+              "string"
+            ],
+            "path": "string"
+          }
+        ],
+        "mcpServers": [
+          {
+            "enabled": false,
+            "name": "string",
+            "status": "connecting",
+            "tools": 0
+          }
+        ],
+        "model": "string",
+        "permissionMode": "default",
+        "permissions": [
+          {
+            "decision": "allow",
+            "rule": "string",
+            "sessionScoped": false
+          }
+        ],
+        "provider": "string",
+        "revision": 0,
+        "shell": "string",
+        "shellDialect": "posix",
+        "theme": "auto",
+        "thinking": "off"
+      },
+      "conversations": {
+        "active": [
+          {
+            "historyGeneration": 0,
+            "id": "string",
+            "isMember": false,
+            "kind": {
+              "type": "main"
+            },
+            "mentions": 0,
+            "obligations": [
+              {
+                "kind": "mentionDebt",
+                "since": 0
+              }
+            ],
+            "pendingInteractions": 0,
+            "queueCount": 0,
+            "queueRevision": 0,
+            "revision": 0,
+            "runState": "idle",
+            "title": "string",
+            "unread": 0
+          }
+        ],
+        "count": 0,
+        "revision": 0
+      },
+      "eventCursor": 0,
+      "feedback": [
+        {
+          "code": "string",
+          "id": "string",
+          "level": "info",
+          "message": "string",
+          "raisedAt": 0
+        }
+      ],
+      "interactions": [
+        {
+          "conversationId": "string",
+          "id": "string",
+          "openedAt": 0,
+          "prompt": {
+            "allowsFeedback": false,
+            "decisions": [
+              "allowOnce"
+            ],
+            "title": "string",
+            "tool": {
+              "input": {},
+              "name": "string"
+            },
+            "type": "permission"
+          },
+          "remainingGuardMs": 0
+        }
+      ],
+      "operations": [
+        {
+          "id": "string",
+          "kind": "providerLogin",
+          "startedAt": 0,
+          "status": "running"
+        }
+      ],
+      "session": {
+        "createdAt": 0,
+        "cwd": "string",
+        "epoch": "string",
+        "id": "string",
+        "locator": {
+          "type": "latest"
+        },
+        "model": "string",
+        "permissionMode": "default",
+        "provider": "string",
+        "resumed": false,
+        "state": "active",
+        "thinking": "off",
+        "title": "string",
+        "updatedAt": 0
+      }
+    }
+  }
+}

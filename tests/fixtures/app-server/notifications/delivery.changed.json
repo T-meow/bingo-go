@@ -1,0 +1,21 @@
+{
+  "jsonrpc": "2.0",
+  "method": "delivery/changed",
+  "params": {
+    "delivery": {
+      "followUps": 0,
+      "from": "string",
+      "id": "string",
+      "maxFollowUps": 0,
+      "private": false,
+      "state": "queued",
+      "to": "string",
+      "updatedAt": 0
+    },
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    }
+  }
+}

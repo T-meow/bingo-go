@@ -1,0 +1,9 @@
+{
+  "code": -32003,
+  "message": "The connection is not initialized yet.",
+  "data": {
+    "bingoCode": "NOT_INITIALIZED",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

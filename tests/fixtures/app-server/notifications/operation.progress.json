@@ -1,0 +1,15 @@
+{
+  "jsonrpc": "2.0",
+  "method": "operation/progress",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "operationId": "string",
+    "progress": {
+      "label": "string"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "code": -32010,
+  "message": "The turn is no longer active.",
+  "data": {
+    "bingoCode": "TURN_CLOSED",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "code": -32007,
+  "message": "The conversation does not exist.",
+  "data": {
+    "bingoCode": "CONVERSATION_NOT_FOUND",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

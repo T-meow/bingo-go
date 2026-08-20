@@ -1,0 +1,29 @@
+{
+  "jsonrpc": "2.0",
+  "method": "interaction/opened",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "interaction": {
+      "conversationId": "string",
+      "id": "string",
+      "openedAt": 0,
+      "prompt": {
+        "allowsFeedback": false,
+        "decisions": [
+          "allowOnce"
+        ],
+        "title": "string",
+        "tool": {
+          "input": {},
+          "name": "string"
+        },
+        "type": "permission"
+      },
+      "remainingGuardMs": 0
+    }
+  }
+}

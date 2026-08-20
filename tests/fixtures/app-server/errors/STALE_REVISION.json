@@ -1,0 +1,9 @@
+{
+  "code": -32012,
+  "message": "The resource changed since that revision.",
+  "data": {
+    "bingoCode": "STALE_REVISION",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

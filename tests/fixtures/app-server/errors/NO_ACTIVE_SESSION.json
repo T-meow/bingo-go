@@ -1,0 +1,9 @@
+{
+  "code": -32005,
+  "message": "No session is open on this connection.",
+  "data": {
+    "bingoCode": "NO_ACTIVE_SESSION",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

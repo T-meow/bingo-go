@@ -1,0 +1,32 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "resource": {
+      "items": [
+        {
+          "cwd": "string",
+          "description": "string",
+          "id": "string",
+          "kind": "crew",
+          "lastActiveAt": 0,
+          "model": "string",
+          "name": "string",
+          "outputTokens": 0,
+          "pending": 0,
+          "prompt": "string",
+          "provider": "string",
+          "recentActivity": [
+            "string"
+          ],
+          "state": "running",
+          "thinking": "off",
+          "toolUses": 0,
+          "unacked": 0
+        }
+      ],
+      "resource": "agents",
+      "revision": 0
+    }
+  }
+}

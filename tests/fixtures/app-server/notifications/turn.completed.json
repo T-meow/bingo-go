@@ -1,0 +1,23 @@
+{
+  "jsonrpc": "2.0",
+  "method": "turn/completed",
+  "params": {
+    "conversationId": "string",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "turn": {
+      "conversationId": "string",
+      "id": "string",
+      "inputItemIds": [
+        "string"
+      ],
+      "origin": "user",
+      "round": 0,
+      "startedAt": 0,
+      "status": "running"
+    }
+  }
+}

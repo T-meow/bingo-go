@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "method": "item/commandTailUpdated",
+  "params": {
+    "conversationId": "string",
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "itemId": "string",
+    "tail": {
+      "lines": [
+        "string"
+      ],
+      "totalLines": 0
+    }
+  }
+}

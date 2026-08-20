@@ -1,0 +1,9 @@
+{
+  "code": -32015,
+  "message": "That decision was not offered for this prompt.",
+  "data": {
+    "bingoCode": "INTERACTION_INVALID_DECISION",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}

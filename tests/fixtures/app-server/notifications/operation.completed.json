@@ -1,0 +1,17 @@
+{
+  "jsonrpc": "2.0",
+  "method": "operation/completed",
+  "params": {
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    },
+    "operation": {
+      "id": "string",
+      "kind": "providerLogin",
+      "startedAt": 0,
+      "status": "running"
+    }
+  }
+}

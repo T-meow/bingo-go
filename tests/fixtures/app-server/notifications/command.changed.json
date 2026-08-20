@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "method": "command/changed",
+  "params": {
+    "command": {
+      "command": "string",
+      "durationMs": 0,
+      "id": "string",
+      "label": "string",
+      "startedAt": 0,
+      "state": "running"
+    },
+    "event": {
+      "seq": 0,
+      "sessionId": "string",
+      "ts": 0
+    }
+  }
+}

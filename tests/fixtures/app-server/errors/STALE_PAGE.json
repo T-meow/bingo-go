@@ -1,0 +1,9 @@
+{
+  "code": -32011,
+  "message": "The page cursor belongs to an older history generation.",
+  "data": {
+    "bingoCode": "STALE_PAGE",
+    "recoverable": true,
+    "scope": "connection"
+  }
+}
