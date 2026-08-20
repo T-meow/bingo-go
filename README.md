@@ -160,6 +160,7 @@ Bingo child process
 ## 文档
 
 - [当前架构](docs/architecture.md)
+- [app-server 前端重构方案（路线 A）](docs/app-server-refactor-plan.zh-CN.md)
 - [跨平台发行](docs/cross-platform-release.zh-CN.md)
 - [上游来源与同步](docs/upstream-sync.zh-CN.md)
 - [打包体积规范](docs/package-size-standard.zh-CN.md)
