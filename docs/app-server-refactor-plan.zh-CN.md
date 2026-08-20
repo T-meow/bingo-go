@@ -715,38 +715,38 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 
 ### P3 · 新 Shell、appStore 与应用骨架
 
-- [ ] `appStore` + selectors + resync 逻辑。
-- [ ] `AppShellV2`（Layout + Splitter + Nav Rail + Drawer 窄屏适配）。
-- [ ] `CommandPalette`（action/list）、会话搜索。
-- [ ] 新会话/恢复/列表：`session/start/resume/list`。
-- [ ] `conversation/list`、`conversation/read`、`conversation/markRead`。
-- [ ] `ConversationSidebar`（Main/Agents/Rooms 分组，unread/mentions/runState/queueCount Badge）。
-- [ ] `NotificationCoordinator` 迁移 turn/interaction/feedback。
+- [x] `appStore` + selectors + resync 逻辑：`appStore.ts`（快照/事件 reducer、log/live/tail/queue/collections）、`useAppStore.ts`；连接层 seq 洞触发 `desynchronized`。
+- [x] `AppShellV2`（Layout + Splitter + Nav Rail + Drawer 窄屏适配），组件已就绪，待主入口切换。
+- [x] `CommandPalette`（action/list 数据 + 过滤/可用态），组件已就绪。
+- [x] 新会话/恢复/列表：`AppServerSession.sessionStart/resume/list/read/close/delete` 已实现并有 fake-server 测试；尚未接 IPC。
+- [x] `conversation/list`、`conversation/read`、`conversation/markRead`：同上，facade 已实现。
+- [x] `ConversationSidebar`（Main/Agents/Rooms 分组，unread/mentions/runState/queueCount Badge），组件已就绪。
+- [ ] `NotificationCoordinator` 迁移 turn/interaction/feedback：留到主入口切换阶段。
 
-**验收：** 启动应用可连接 bingo、可开新会话、可列出并恢复历史会话、切换 conversation 不丢状态；注入 seq 洞后 store 自动 resync。
+**验收（当前）：** `appStore.test.ts` 6 例覆盖快照、delta、retry 撤回、队列、interaction、集合更新；typecheck/test 全绿。**未完成：** Electron main 与 renderer 尚未切换到 v2 路径。
 
 ### P4 · 主对话纵向切片（先可用）
 
-- [ ] `ConversationCanvas` + `ItemRenderer` 的 message/reasoning/toolCall/notice/interruption 基础集合。
-- [ ] `Composer`（Sender 槽位 + Sender.Switch + Attachments + Suggestion）。
-- [ ] `conversation/submit`（Composer/SendProse）、`turn/interrupt`、`queue/read`、`queue/reclaimTail`。
-- [ ] `InteractionCard` + `interaction/respond`。
-- [ ] `ContextPanel`（Progress dashboard + Statistic）。
-- [ ] `TurnGroup`（turn/retrying Steps）。
+- [x] `ConversationCanvas` + `ItemRenderer`：14 类 item 的基础渲染（message/reasoning/toolCall/command/system/asset）。
+- [~] `Composer`：Sender 槽位 + Sender.Switch + Attachments + 队列状态已实现；`Suggestion`（@/#/命令联想）待接入。
+- [~] `conversation/submit`、`turn/interrupt`、`queue/read`、`queue/reclaimTail`：`AppServerSession` facade + `composerSubmit/sendProse/rewind` helper 已实现；未接 IPC/UI 调用。
+- [x] `InteractionCard` + `interaction/respond`：组件三态渲染 + decision 回调；facade 已有 `interactionRespond`。
+- [x] `ContextPanel`（Progress dashboard + Statistic）。
+- [x] `TurnGroup`（turn/retrying Steps）。
 
-**验收：** 在真实 bingo 上完成：新会话 → 提问 → 流式输出 → 工具调用 → 权限允许 → 完成；busy 时第二条输入入队并可撤回队尾；中断幂等；重启 resume 恢复同一会话。
+**验收（当前）：** `conversationComponents.test.tsx` 覆盖语义消息渲染与权限 decision；`appServerSession.test.ts` 覆盖 submit/interrupt/queue/interaction 等请求面。**未完成：** 真实 bingo 上的端到端对话流未接通。
 
 ### P5 · 设置、目录、资产、历史
 
-- [ ] `catalog/read` 驱动的 Provider/Model/Skills/Images/MCP 设置页。
-- [ ] `config/read` + `action/execute` 运行时选择。
-- [ ] `SettingsRepository` 适配 config revision。
-- [ ] `asset/registerPath` + `asset/readChunk` 附件与图片渲染。
-- [ ] `conversationRewind` 的编辑历史提示与中断恢复流程。
-- [ ] 删除 `TranscriptRepository` 与 JSONL 直读路径。
-- [ ] 会话删除/重命名的 confirmation interaction。
+- [x] `catalog/read` 驱动的设置页组件：`AppServerSettingsView.tsx`（Provider/Model/Thinking/Permission/Theme/MCP/actions）。
+- [x] `config/read` + `action/execute` 运行时选择：`AppServerSession.configRead/actionList/actionExecute` 已实现。
+- [ ] `SettingsRepository` 适配 config revision：尚未做（主入口切换时处理）。
+- [~] `asset/registerPath` + `asset/readChunk`：facade 已实现；附件注册与图片 chunk 渲染 UI 未接。
+- [~] `conversationRewind`：`AppServerSession.rewind` helper 已实现；编辑历史/中断恢复 UI 未接。
+- [ ] 删除 `TranscriptRepository` 与 JSONL 直读路径：按 P7 统一清理。
+- [ ] 会话删除/重命名的 confirmation interaction：主入口切换时处理。
 
-**验收：** 设置页可读可写；图片可上传并出现在历史；编辑上次提示可预览/应用；无 v1 transcript 解析调用残留。
+**验收（当前）：** 请求面全部有 fake-server 覆盖；UI 组件可编译并有基础测试。**未完成：** 主进程文件仓库改造、IPC 接线与端到端验收。
 
 ### P6 · 团队与协作纵向切片（群聊为核心）
 
