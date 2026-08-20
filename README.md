@@ -29,29 +29,22 @@ Team 页面围绕固定团队大厅和任务群聊组织：
 
 ## 运行时兼容性
 
-Bingo Go 当前以 `bingo 0.4.0` 和 wire protocol v1 为稳定基线。完整功能要求运行时探针提供以下 capability：
+Bingo Go 以官方 `bingo 0.4.1`（commit `7bee209`，tag `v0.4.1`）为稳定基线，通过 `bingo app-server`（JSON-RPC 2.0 / NDJSON / stdio）驱动，不再使用 `--json-events`。
 
-- `settings.inspect.v1`
-- `team.workspace.v1`
-- `team.tasks.v1`
-- `team.blueprint.v2`
-- `team.lobby.v1`
-- `team.presets.v1`
-- `team.member.profile.v1`
-- `attachments.input.v1`
-- `session.workspace.v1`
-- `session.context.v1`
+初始化握手会协商以下 server capabilities：
 
-`session.fork.v1` 用于编辑历史提示词和中断恢复；缺失时相应入口会禁用。Team v2 不改变 wire protocol 版本，`.bingo/team.json` 的蓝图 schema 才是 v2。
+- `multiConversation`、`reasoning`、`images`、`shell`
+- `rooms`、`teams`
 
 检查本地二进制：
 
 ```bash
 bingo --version
-bingo --json-events --probe
+node scripts/verify-app-server-schema.mjs ../bingo/target/release/bingo
+npm run generate:app-server-types
 ```
 
-探针必须只输出一条 `protocol.ready` NDJSON 记录。普通上游发行版如果还没有 `--json-events`，不能直接驱动 Bingo Go。
+普通上游发行版如果没有 `bingo app-server`，不能直接驱动 Bingo Go。
 
 ## 开发
 
@@ -60,7 +53,7 @@ bingo --json-events --probe
 - Node.js 24 与 npm
 - Rust stable toolchain
 - Windows、macOS 或 Linux 桌面环境
-- 与本仓库相邻的 Bingo 源码目录，或一个兼容的 Bingo 绝对路径
+- 与本仓库相邻的 Bingo 源码目录（上游 `7bee209`），或一个兼容的 Bingo 绝对路径
 
 默认本地打包结构：
 

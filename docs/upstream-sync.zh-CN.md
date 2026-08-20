@@ -22,19 +22,16 @@ Rei 更新应在 Bingo Go 仓库外的临时检出中获取和审阅：
 
 当前可重复构建基线为：
 
-- Bingo commit：`9ed235c393045a48b9dcdad108dfc0fa53a6890a`
-- Cargo 版本：`v0.4.0`
-- Wire protocol：v1
-- 扩展补丁：`vendor/bingo/v0.4.0-protocol-v1.patch`
+- Bingo commit：`7bee209d191c41b62b8b9e135bf5124f581e7505`
+- Cargo 版本 / tag：`v0.4.1`
+- Wire protocol：`bingo app-server`（JSON-RPC 2.0 / NDJSON / stdio，protocol 1.0）
+- Schema 副本：`vendor/bingo/app-server-schema/v1.0/`
 
-Team v2 通过 capability 扩展 protocol v1，蓝图使用 schema v2。完整运行时必须提供 `team.workspace.v1`、`team.tasks.v1`、`team.blueprint.v2`、`team.lobby.v1`、`team.presets.v1` 和 `team.member.profile.v1`。
-
-升级 Bingo 基线时：
+不再维护 protocol v1 补丁。升级 Bingo 基线时：
 
 1. 在独立临时检出中切换到目标稳定 tag 或完整 SHA。
-2. 应用或重建协议补丁，审阅每个冲突，不直接覆盖现有 patch。
-3. 验证普通 TUI/CLI 行为和 protocol v1 行为均未回退。
-4. 运行 Rust 检查：
+2. 对比新 commit 的 `schema/app-server/` 与本地 schema 副本。
+3. 运行 Rust 检查：
 
 ```bash
 cargo fmt --all -- --check
@@ -44,8 +41,16 @@ cargo test --locked --all-targets
 cargo build --locked --release
 ```
 
-5. 检查 `--version` 与单条 NDJSON `--json-events --probe` 输出。
-6. 更新 workflow 固定 commit、vendor patch、版本检查和第三方声明。
+4. 验证 `--version`、`bingo app-server` initialize 握手与 schema 漂移校验。
+5. 重新生成 TS 类型与 fixtures：
+
+```bash
+npm run generate:app-server-types
+npm run generate:app-server-fixtures
+node scripts/verify-app-server-schema.mjs ../bingo/target/release/bingo
+```
+
+6. 更新 workflow 固定 commit、版本检查、schema 副本 README 和第三方声明。
 7. 在 Bingo Go 运行 `npm run typecheck`、`npm test`、`npm run build` 与目标平台完整打包验证。
 
 `resources/bin/` 只保存打包流程生成的临时 runtime，不进入 Git。开发时可以用绝对路径的 `BINGO_GUI_BINARY` 指向已验证二进制；CI 始终从固定源码重新构建。
