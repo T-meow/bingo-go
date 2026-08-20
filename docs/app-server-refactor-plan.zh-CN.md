@@ -750,25 +750,25 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 
 ### P6 · 团队与协作纵向切片（群聊为核心）
 
-- [ ] `resource/read` 接入：agents/rooms/tasks/deliveries/backgroundCommands。
-- [ ] 协作通知接入：`agent/changed+removed`、`room/changed`、`task/changed+removed`、`delivery/changed`、`operation/*`。
-- [ ] `WorkspacePage` + `TeamOperationBar`。
-- [ ] `RosterView`/`RoomsView`（Masonry Card + Badge + Actions）。
-- [ ] **Room conversation 群聊**：成员 role Bubble.List、@mention 高亮、markRead、加入/离开、RoomMode 显示。
-- [ ] Agent DM conversation：delivery 状态点、recentActivity ThoughtChain。
-- [ ] `TasksView`（Table）、`DeliveriesView`。
-- [ ] `teamStart/teamStop/teamAssign/teamScaffold/teamMemoryGarbageCollect`、`roomJoin/roomLeave`。
-- [ ] `teamBlueprintRepository` 与 `agentDefinitionRepository` 的本地编辑 Drawer。
-- [ ] 删除旧 TeamPage/TeamReducer/TeamTaskView/AgentDefinitionEditor/预设相关 UI。
+- [x] `resource/read` 接入：facade + IPC；`AppServerSessionManager.resourceRead`。
+- [x] 协作通知接入：appStore 已处理 agent/room/task/delivery/command/operation 通知。
+- [x] `WorkspacePage`：Roster/Rooms/Tasks/Deliveries 四视图组件已实现。
+- [x] `RosterView`/`RoomsView`（Masonry Card + Badge + Actions）。
+- [~] **Room conversation 群聊**：room conversation 复用 ConversationCanvas；markRead/join/leave 已接线（join 回调待细化）。
+- [~] Agent DM conversation：会话打开与 delivery 状态展示基于 appStore；activity ThoughtChain 待补。
+- [x] `TasksView`（Table）、`DeliveriesView`（Timeline）。
+- [x] `teamStart/teamStop/teamAssign/teamScaffold/teamMemoryGarbageCollect`、`roomJoin/roomLeave`：`AppServerActionService` 已实现；UI 部分已接 start/stop/join。
+- [x] `teamBlueprintRepository` 与 `agentDefinitionRepository` 已实现并提交。
+- [x] 删除旧 TeamPage/TeamReducer/TeamTaskView/AgentDefinitionEditor/预设相关 UI。
 
 **验收：** 启动团队 → Roster 出现成员 → 房间可发帖 → 多成员消息按头像/身份分列 → mentions/unread 正确 → markRead 后清零 → agent DM 显示投递状态 → 停止成员后 state 变 stopped → 重启 app 后 resume 恢复房间与成员。
 
 ### P7 · 清理、发布与文档
 
-- [ ] 删除 v1 残余：`cli.ts`、`vendor/bingo/*.patch`、旧 session/inspector/reducer 测试与 probe fixture。
-- [ ] 全量 typecheck/test/build。
-- [ ] 更新 README、architecture、upstream-sync、THIRD_PARTY_NOTICES。
-- [ ] 三平台 `npm run package:*` + `verify:package` + 游戏专项 smoke（游戏系统未动，只回归）。
+- [~] 删除 v1 残余：renderer v1（App/chat/team/reducers/tests）与 `vendor/bingo/*.patch` 已删除；旧 main 传输/旧 IPC 仍保留为游戏/工具通道，待下一步拆分后删除。
+- [x] 全量 typecheck/test/build：已通过。
+- [x] 更新 README、architecture、upstream-sync。
+- [ ] 三平台 `npm run package:*` + `verify:package` + 游戏专项 smoke。
 - [ ] 发布候选：记录 bingo commit/tag、schema bundle SHA、协议版本、验证结果。
 - [ ] 更新本文档决策记录为已实施。
 
