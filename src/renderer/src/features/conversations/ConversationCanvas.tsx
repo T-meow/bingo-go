@@ -1,12 +1,12 @@
 import { Tag } from 'antd'
-import type { ConversationSummary, ContextUsage, Interaction, Item, QueueEntry, Turn, TurnUsage } from '../../../../shared/contracts/appServer'
+import type { ConversationSummary, ContextUsage, Interaction, InteractionDecision, Item, QueueEntry, Turn, TurnUsage } from '../../../../shared/contracts/appServer'
 import { Composer, type ComposerAttachment } from './Composer'
 import { ContextPanel } from './ContextPanel'
 import { InteractionCard } from './InteractionCard'
 import { ItemRenderer } from './ItemRenderer'
 import { TurnGroup } from './TurnGroup'
 
-export function ConversationCanvas({ conversation, items, interactions, turn, queue, contextUsage, turnUsage, composer }: {
+export function ConversationCanvas({ conversation, items, interactions, turn, queue, contextUsage, turnUsage, composer, onRespond }: {
   conversation: ConversationSummary | null
   items: Item[]
   interactions: Interaction[]
@@ -25,6 +25,7 @@ export function ConversationCanvas({ conversation, items, interactions, turn, qu
     onReclaimTail: () => void
     attachments: ComposerAttachment[]
   }
+  onRespond: (interaction: Interaction, decision: InteractionDecision, activation: 'pointer' | 'keyboard') => void
 }): React.JSX.Element {
   return (
     <div className="conversation-canvas" data-testid="conversation-canvas">
@@ -37,7 +38,7 @@ export function ConversationCanvas({ conversation, items, interactions, turn, qu
         <TurnGroup turn={turn}>
           {items.map((item) => <ItemRenderer key={item.id} item={item} />)}
         </TurnGroup>
-        {interactions.map((interaction) => <InteractionCard key={interaction.id} interaction={interaction} onRespond={() => undefined} />)}
+        {interactions.map((interaction) => <InteractionCard key={interaction.id} interaction={interaction} onRespond={(decision, activation) => onRespond(interaction, decision, activation)} />)}
       </section>
       <ContextPanel contextUsage={contextUsage} turnUsage={turnUsage} />
       <Composer

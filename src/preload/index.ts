@@ -3,6 +3,7 @@ import {
   IPC, appearanceSaveInputSchema, clipboardWriteTextInputSchema, connectionInputSchema, mcpServerRemoveInputSchema, mcpServerSettingsInputSchema, modelListInputSchema, notificationActivationSchema, notificationPreferencesSaveInputSchema, profileSaveInputSchema, providerRemoveInputSchema, providerSettingsInputSchema, runtimeSettingsInputSchema, runtimeSettingsSaveInputSchema, settingsSaveInputSchema, sessionAttachmentInputSchema, sessionDeleteInputSchema, sessionOpenInputSchema, sessionPromptInputSchema, sessionRenameInputSchema, sessionSendInputSchema,
   sessionForkInputSchema, sessionTurnInputSchema, agentDefinitionArchiveInputSchema, agentDefinitionInputBaseSchema, agentDefinitionSaveInputSchema, gamePackClearDataInputSchema, gamePackEventSchema, gamePackInstallInputSchema, gamePackLaunchInputSchema, gamePackSetEnabledInputSchema, gamePackUninstallInputSchema, teamAvatarGetInputSchema, teamAvatarImportInputSchema, teamChannelInputSchema, teamChannelPostInputSchema, teamLobbyGetInputSchema, teamLobbyPostInputSchema, teamMemberInputSchema, teamMemberPromoteInputSchema, teamMessageInputSchema, teamPresetImportInputSchema, teamSaveInputSchema, teamTaskCreateInputSchema, teamTaskGetInputSchema, teamTaskInputSchema, teamTaskPostInputSchema, teamTaskResumeInputSchema, workspaceSelectInputSchema, type BingoGuiApi, type GamePackEvent, type RendererSessionEvent
 } from '../shared/contracts/ipc'
+import type { AppServerRendererEvent, BingoAppApi, Result } from '../shared/contracts/appServerIpc'
 
 const api: BingoGuiApi = {
   getAppInfo: () => ipcRenderer.invoke(IPC.appGetInfo),
@@ -100,3 +101,36 @@ const api: BingoGuiApi = {
 }
 
 contextBridge.exposeInMainWorld('bingoGui', api)
+
+const appApi: BingoAppApi = {
+  probe: (workspacePath) => ipcRenderer.invoke('app-server:probe', { workspacePath }),
+  connect: (workspacePath) => ipcRenderer.invoke('app-server:connect', { workspacePath }),
+  resume: (locator) => ipcRenderer.invoke('app-server:resume', { locator }),
+  disconnect: () => ipcRenderer.invoke('app-server:disconnect'),
+  listSessions: () => ipcRenderer.invoke('app-server:list-sessions'),
+  readConversation: (params) => ipcRenderer.invoke('app-server:read-conversation', params),
+  markRead: (params) => ipcRenderer.invoke('app-server:mark-read', params),
+  composerSubmit: (conversationId, text, mode, attachments) => ipcRenderer.invoke('app-server:submit', { conversationId, text, mode, attachments }),
+  sendProse: (conversationId, text, attachments) => ipcRenderer.invoke('app-server:submit', { conversationId, text, mode: 'normal', attachments, prose: true }),
+  interrupt: (params) => ipcRenderer.invoke('app-server:interrupt', params),
+  respond: (interactionId, decision, activation) => ipcRenderer.invoke('app-server:respond', { interactionId, decision, activation }),
+  readConfig: () => ipcRenderer.invoke('app-server:read-config'),
+  readCatalog: (kind, provider) => ipcRenderer.invoke('app-server:read-catalog', { kind, provider }),
+  listActions: () => ipcRenderer.invoke('app-server:list-actions'),
+  executeAction: (params) => ipcRenderer.invoke('app-server:execute-action', params),
+  readResource: (kind, cursor) => ipcRenderer.invoke('app-server:read-resource', { kind, cursor }),
+  registerAsset: (path, expectedMime) => ipcRenderer.invoke('app-server:register-asset', { path, expectedMime }),
+  readAssetDataUrl: (assetId, mime) => ipcRenderer.invoke('app-server:read-asset-data-url', { assetId, mime }),
+  queueRead: (params) => ipcRenderer.invoke('app-server:queue-read', params),
+  queueReclaimTail: (params) => ipcRenderer.invoke('app-server:queue-reclaim', params),
+  sessionDelete: (params) => ipcRenderer.invoke('app-server:session-delete', params),
+  restartAfterDefinitionWrite: () => ipcRenderer.invoke('app-server:restart-after-definition-write'),
+  onEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, value: AppServerRendererEvent): void => listener(value)
+    ipcRenderer.on('app-server:event', handler)
+    return () => ipcRenderer.removeListener('app-server:event', handler)
+  }
+}
+
+contextBridge.exposeInMainWorld('bingoApp', appApi)
+

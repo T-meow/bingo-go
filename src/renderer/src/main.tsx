@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
+import { App as AntApp } from 'antd'
 import { createRoot } from 'react-dom/client'
-import App from './App'
+import AppV2 from './AppV2'
 import { AppearanceProvider } from './theme/AppearanceProvider'
 import { UserProfileProvider } from './profile/UserProfileProvider'
 import './styles.css'
@@ -11,10 +12,12 @@ if (!root) throw new Error('Renderer root element is missing')
 
 createRoot(root).render(
   <StrictMode>
-    <AppearanceProvider>
+    <AntApp>
+      <AppearanceProvider>
       <UserProfileProvider>
-        <App />
+        <AppV2 />
       </UserProfileProvider>
-    </AppearanceProvider>
+      </AppearanceProvider>
+    </AntApp>
   </StrictMode>
 )

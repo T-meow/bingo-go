@@ -1,5 +1,7 @@
 import type {
   ActionExecuteParams,
+  InteractionRespondParams,
+  InteractionRespondResult,
   ActionExecuteResult,
   ActionListResult,
   AppServerNotification,
@@ -127,6 +129,10 @@ export class AppServerSessionManager {
 
   async queueReclaimTail(params: QueueReclaimTailParams): Promise<QueueReclaimTailResult> {
     return this.requireSession().queueReclaimTail(params)
+  }
+
+  async interactionRespond(params: InteractionRespondParams): Promise<InteractionRespondResult> {
+    return this.requireSession().interactionRespond(params)
   }
 
   async actionList(): Promise<ActionListResult> {

@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, Notification } from 'electron'
 import { join } from 'node:path'
 import { registerIpc, sendSessionEvent } from './ipc/registerIpc'
+import { registerAppServerIpc } from './ipc/registerAppServerIpc'
 import { RuntimeLocator } from './runtime/runtimeLocator'
 import { SessionManager } from './runtime/sessionManager'
 import { StdioBingoSession } from './runtime/stdioBingoSession'
@@ -86,6 +87,7 @@ async function createWindow(): Promise<void> {
     console.error('Game package subsystem initialization failed.', error)
   }
   registerIpc(window, locator, sessions, transcripts, settings, binaryPath, appearance, workspace, notificationPreferences, notifications, gamePacks, gameWindows ?? undefined, profile)
+  registerAppServerIpc(window, locator, binaryPath)
   window.once('ready-to-show', () => window.show())
   if (process.env.ELECTRON_RENDERER_URL) void window.loadURL(process.env.ELECTRON_RENDERER_URL)
   else void window.loadFile(join(__dirname, '../renderer/index.html'))
