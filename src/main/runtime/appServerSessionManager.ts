@@ -157,6 +157,14 @@ export class AppServerSessionManager {
     return this.requireSession().assetReadChunk(params)
   }
 
+  async restartCurrent(): Promise<SessionSnapshot> {
+    const locator = this.snapshot?.session.locator ?? null
+    const workspace = this.snapshot?.session.cwd ?? this.cwd
+    await this.close()
+    if (locator) return this.resume(locator)
+    return this.start(workspace)
+  }
+
   currentSnapshot(): SessionSnapshot | null {
     return this.snapshot
   }

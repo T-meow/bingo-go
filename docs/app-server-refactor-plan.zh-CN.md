@@ -740,9 +740,9 @@ README.md / docs/architecture.md / docs/upstream-sync.zh-CN.md / THIRD_PARTY_NOT
 
 - [x] `catalog/read` 驱动的设置页组件：`AppServerSettingsView.tsx`（Provider/Model/Thinking/Permission/Theme/MCP/actions）。
 - [x] `config/read` + `action/execute` 运行时选择：`AppServerSession.configRead/actionList/actionExecute` 已实现。
-- [ ] `SettingsRepository` 适配 config revision：尚未做（主入口切换时处理）。
-- [~] `asset/registerPath` + `asset/readChunk`：facade 已实现；附件注册与图片 chunk 渲染 UI 未接。
-- [~] `conversationRewind`：`AppServerSession.rewind` helper 已实现；编辑历史/中断恢复 UI 未接。
+- [~] `AppServerSettingsAdapter` 已实现运行时选择（action/execute）与定义写后 `restartCurrent()` 重载；`SettingsRepository` 自身的 revision 语义仍保留旧文件 SHA，主入口切换时对齐。
+- [x] `asset/registerPath` + `asset/readChunk`：`AppServerAssetService`（registerPath/readDataUrl/readText、32 MiB 上限）已实现；renderer `AssetImage` 分块加载组件已实现。
+- [x] `conversationRewind`：`AppServerActionService.rewind` + `AppServerSession.rewind` 已实现；renderer `RewindDialog`（先预览、后应用）已实现。
 - [ ] 删除 `TranscriptRepository` 与 JSONL 直读路径：按 P7 统一清理。
 - [ ] 会话删除/重命名的 confirmation interaction：主入口切换时处理。
 
